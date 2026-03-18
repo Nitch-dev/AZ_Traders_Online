@@ -1,0 +1,496 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ inv.invoice_number }}{% endblock %}
+{% block content %}
+
+<div class="card">
+    <div class="card-header bg-warning text-dark">
+        <i class="bi bi-pencil-square"></i> Edit Invoice — {{ inv.invoice_number }}
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('user.edit_invoice', inv_id=inv.id) }}" id="editForm">
+
+            <!-- Party -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">Party Name</label>
+                <select name="party_id" class="form-select" required>
+                    <option value="">-- Select Party --</option>
+                    {% for p in parties %}
+                    <option value="{{ p.id }}" {% if p.id == inv.party_id %}selected{% endif %}>
+                        {{ p.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- ===== ADD ITEMS SECTION ===== -->
+            <div class="card bg-light mb-3">
+                <div class="card-body pb-2">
+                    <label class="form-label fw-bold mb-2">
+                        <i class="bi bi-plus-circle"></i> Items
+                    </label>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-8 position-relative">
+                            <input type="text" id="itemSearch" class="form-control"
+                                   placeholder="Type item code or name..." autocomplete="off">
+                            <div id="itemResults" class="autocomplete-dropdown"></div>
+                        </div>
+                        <div class="col-4">
+                            <input type="number" id="qtyInput" class="form-control"
+                                   placeholder="Qty" min="1" disabled>
+                        </div>
+                    </div>
+                    <div id="stockHint" class="text-success fw-bold mb-1" style="font-size:12px; display:none;"></div>
+                    <div id="itemHint" class="text-muted mb-2" style="font-size:12px">
+                        Search item → select → enter quantity → press Enter to add
+                    </div>
+
+                    <div id="itemsList"></div>
+                    <div id="noItemsMsg" class="text-muted text-center py-2" style="font-size:13px; display:none;">
+                        No items added yet.
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" name="items_json" id="itemsJson" value="[]">
+
+            <!-- Delivery Adda -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">Delivery Adda</label>
+                <div class="position-relative">
+                    <input type="text" id="addaSearch" class="form-control"
+                           placeholder="Type adda name..." autocomplete="off"
+                           value="{{ initial_adda_name if initial_adda_name is defined else (inv.addas.name if inv.addas else '') }}">
+                    <div id="addaResults" class="autocomplete-dropdown"></div>
+                </div>
+                <div class="mt-2">
+                    <input type="text" id="addaNumberInput" name="adda_number" class="form-control"
+                           placeholder="Adda Number (e.g. 12)"
+                           value="{{ initial_adda_number if initial_adda_number is defined else '' }}">
+                </div>
+                <input type="hidden" name="adda_id" id="addaIdInput" value="">
+                <input type="hidden" name="adda_name" id="addaNameInput" value="">
+                <div id="addaHint" class="text-muted mt-1" style="font-size:12px">
+                    {% if inv.addas %}
+                    <span class="text-success"><i class="bi bi-check-circle"></i> {{ inv.addas.name }}</span>
+                    {% else %}
+                    Type adda name, then enter adda number
+                    {% endif %}
+                </div>
+                <div id="addaPreview" class="fw-semibold text-primary mt-1" style="font-size:13px; {% if not initial_adda_name %}display:none;{% endif %}">
+                    {% if initial_adda_name %}Preview: {{ initial_adda_name }}{% if initial_adda_number %} - {{ initial_adda_number }}{% endif %}{% endif %}
+                </div>
+            </div>
+
+            <!-- Delivery Payment -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">Delivery Payment</label>
+                <div class="d-flex gap-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="delivery_paid"
+                               id="deliveryPaid" value="yes"
+                               {% if inv.delivery_paid %}checked{% endif %}>
+                        <label class="form-check-label" for="deliveryPaid">Paid</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="delivery_paid"
+                               id="deliveryNotPaid" value="no"
+                               {% if not inv.delivery_paid %}checked{% endif %}>
+                        <label class="form-check-label" for="deliveryNotPaid">Not Paid</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Delivery Amount -->
+            <div class="mb-3" id="deliveryAmountGroup"
+                 style="{% if inv.delivery_paid %}display:none;{% endif %}">
+                <label class="form-label fw-bold">Delivery Amount (₹)</label>
+                <input type="number" step="0.01" name="delivery_amount" id="deliveryAmountInput"
+                       class="form-control" placeholder="Enter delivery amount" min="0"
+                       value="{{ inv.delivery_amount }}">
+            </div>
+
+            <!-- Invoice Date -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">Invoice Date</label>
+                <select name="invoice_date" class="form-select" required>
+                    {% for d in date_options %}
+                    <option value="{{ d }}" {% if d == inv.invoice_date %}selected{% endif %}>
+                        {{ d }}{% if loop.first %} (Today){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-warning btn-lg flex-fill" id="submitBtn">
+                    <i class="bi bi-check-lg"></i> Save Changes
+                </button>
+                <a href="{{ url_for('user.view_invoice', inv_id=inv.id) }}"
+                   class="btn btn-outline-secondary btn-lg">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ===== Pre-populate existing items =====
+let addedItems = [
+    {% for li in inv.invoice_items %}
+    {
+        item_id: {{ li.item_id }},
+        item_code: "{{ li['items']['item_code'] if li['items'] else '' }}",
+        name: "{{ li['items']['name'] if li['items'] else '' }}",
+        quantity: {{ li.quantity }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+let selectedItem = null;
+let searchTimeout = null;
+let itemHighlightIdx = -1;
+let addaHighlightIdx = -1;
+let addaSearchTimeout = null;
+let selectedAdda = null;
+
+const itemSearch = document.getElementById('itemSearch');
+const itemResults = document.getElementById('itemResults');
+const qtyInput = document.getElementById('qtyInput');
+const itemsList = document.getElementById('itemsList');
+const noItemsMsg = document.getElementById('noItemsMsg');
+const itemsJsonInput = document.getElementById('itemsJson');
+const addaSearch = document.getElementById('addaSearch');
+const addaResults = document.getElementById('addaResults');
+const addaNumberInput = document.getElementById('addaNumberInput');
+const addaIdInput = document.getElementById('addaIdInput');
+const addaNameInput = document.getElementById('addaNameInput');
+const addaHint = document.getElementById('addaHint');
+const addaPreview = document.getElementById('addaPreview');
+
+function getCombinedAddaValue() {
+    const name = addaSearch.value.trim();
+    const num = addaNumberInput.value.trim();
+    if (!name) return '';
+    return num ? (name + ' - ' + num) : name;
+}
+
+function updateAddaPreview() {
+    const name = addaSearch.value.trim();
+    const combined = getCombinedAddaValue();
+    addaNameInput.value = name;
+
+    if (combined) {
+        addaPreview.textContent = 'Preview: ' + combined;
+        addaPreview.style.display = 'block';
+    } else {
+        addaPreview.style.display = 'none';
+    }
+}
+
+// Render existing items immediately
+renderItems();
+
+// ===== Generic arrow-key highlight helper =====
+function updateHighlight(container, idx) {
+    const items = container.querySelectorAll('.autocomplete-item[data-id],.autocomplete-item[data-adda-name],.autocomplete-item.adda-custom');
+    items.forEach((el, i) => {
+        el.classList.toggle('autocomplete-active', i === idx);
+    });
+    if (items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
+}
+
+// ===== ITEM autocomplete search =====
+itemSearch.addEventListener('input', function() {
+    const q = this.value.trim();
+    clearTimeout(searchTimeout);
+    selectedItem = null;
+    qtyInput.disabled = true;
+    itemHighlightIdx = -1;
+
+    if (q.length < 1) {
+        itemResults.innerHTML = '';
+        itemResults.style.display = 'none';
+        return;
+    }
+
+    searchTimeout = setTimeout(() => {
+        fetch('/api/items/search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(items => {
+                itemHighlightIdx = -1;
+                if (items.length === 0) {
+                    itemResults.innerHTML = '<div class="autocomplete-item text-muted">No items found</div>';
+                    itemResults.style.display = 'block';
+                    return;
+                }
+                itemResults.innerHTML = items.map(i =>
+                    '<div class="autocomplete-item" data-id="' + i.id +
+                    '" data-code="' + escHtml(i.item_code) +
+                    '" data-name="' + escHtml(i.name) +
+                    '" data-stock="' + (i.total_stock || 0) + '">' +
+                    '<strong>' + escHtml(i.item_code) + '</strong> — ' + escHtml(i.name) +
+                    ' <span class="badge ' + (i.total_stock > 0 ? 'bg-success' : 'bg-danger') + '" style="font-size:11px">Stock: ' + (i.total_stock || 0) + '</span>' +
+                    '</div>'
+                ).join('');
+                itemResults.style.display = 'block';
+            });
+    }, 200);
+});
+
+itemResults.addEventListener('click', function(e) {
+    const el = e.target.closest('.autocomplete-item');
+    if (!el || !el.dataset.id) return;
+    pickItem(el.dataset.id, el.dataset.code, el.dataset.name, el.dataset.stock);
+});
+
+// Arrow keys + Enter for item search
+itemSearch.addEventListener('keydown', function(e) {
+    const items = itemResults.querySelectorAll('.autocomplete-item[data-id]');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (items.length > 0) {
+            itemHighlightIdx = Math.min(itemHighlightIdx + 1, items.length - 1);
+            updateHighlight(itemResults, itemHighlightIdx);
+        }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (items.length > 0) {
+            itemHighlightIdx = Math.max(itemHighlightIdx - 1, 0);
+            updateHighlight(itemResults, itemHighlightIdx);
+        }
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        let target = items[itemHighlightIdx] || items[0];
+        if (target) {
+            pickItem(target.dataset.id, target.dataset.code, target.dataset.name, target.dataset.stock);
+        }
+    }
+});
+
+function pickItem(id, code, name, stock) {
+    const totalStock = parseInt(stock) || 0;
+    const alreadyAdded = addedItems.filter(it => it.item_id === parseInt(id)).reduce((s, it) => s + it.quantity, 0);
+    const available = totalStock - alreadyAdded;
+    selectedItem = { item_id: parseInt(id), item_code: code, name: name, total_stock: totalStock, available: available };
+    itemSearch.value = code + ' — ' + name;
+    itemSearch.setAttribute('readonly', true);
+    itemResults.style.display = 'none';
+    itemHighlightIdx = -1;
+    qtyInput.disabled = false;
+    qtyInput.value = '';
+    qtyInput.max = available;
+    document.getElementById('stockHint').textContent = 'Available stock: ' + available + ' (Total: ' + totalStock + ')';
+    document.getElementById('stockHint').style.display = 'block';
+    qtyInput.focus();
+}
+
+qtyInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        const qty = parseInt(this.value);
+        if (!selectedItem || !qty || qty < 1) return;
+        if (qty > selectedItem.available) {
+            alert('Not enough stock! Available: ' + selectedItem.available);
+            return;
+        }
+        addedItems.push({
+            item_id: selectedItem.item_id,
+            item_code: selectedItem.item_code,
+            name: selectedItem.name,
+            quantity: qty,
+        });
+        selectedItem = null;
+        itemSearch.value = '';
+        itemSearch.removeAttribute('readonly');
+        qtyInput.value = '';
+        qtyInput.disabled = true;
+        document.getElementById('stockHint').style.display = 'none';
+        itemSearch.focus();
+        renderItems();
+    }
+});
+
+// ===== ADDA autocomplete =====
+addaSearch.addEventListener('input', function() {
+    const q = this.value.trim();
+    clearTimeout(addaSearchTimeout);
+    addaHighlightIdx = -1;
+    selectedAdda = null;
+    addaIdInput.value = '';
+    addaNameInput.value = q;
+
+    if (q.length < 1) {
+        addaResults.innerHTML = '';
+        addaResults.style.display = 'none';
+        addaHint.textContent = 'Type adda name, then enter adda number';
+        updateAddaPreview();
+        return;
+    }
+
+    addaSearchTimeout = setTimeout(() => {
+        fetch('/api/addas/search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(addas => {
+                addaHighlightIdx = -1;
+                let html = '';
+                if (addas.length > 0) {
+                    html += addas.map(a =>
+                        '<div class="autocomplete-item" data-adda-name="' + escHtml(a.name) + '">' +
+                        '<i class="bi bi-geo-alt"></i> ' + escHtml(a.name) +
+                        '</div>'
+                    ).join('');
+                }
+                const exactMatch = addas.some(a => a.name.toLowerCase() === q.toLowerCase());
+                if (!exactMatch && q.length > 0) {
+                    html += '<div class="autocomplete-item adda-custom text-primary" data-custom-name="' + escHtml(q) + '">' +
+                        '<i class="bi bi-plus-circle"></i> Use "<strong>' + escHtml(q) + '</strong>" as new adda' +
+                        '</div>';
+                }
+                addaResults.innerHTML = html || '<div class="autocomplete-item text-muted">No addas found</div>';
+                addaResults.style.display = 'block';
+            });
+    }, 200);
+});
+
+addaResults.addEventListener('click', function(e) {
+    const el = e.target.closest('.autocomplete-item');
+    if (!el) return;
+    if (el.dataset.addaName) {
+        pickAddaName(el.dataset.addaName);
+    } else if (el.dataset.customName || el.classList.contains('adda-custom')) {
+        pickCustomAdda(addaSearch.value.trim());
+    }
+});
+
+addaSearch.addEventListener('keydown', function(e) {
+    const items = addaResults.querySelectorAll('.autocomplete-item[data-adda-name],.autocomplete-item.adda-custom');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (items.length > 0) {
+            addaHighlightIdx = Math.min(addaHighlightIdx + 1, items.length - 1);
+            updateHighlight(addaResults, addaHighlightIdx);
+        }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (items.length > 0) {
+            addaHighlightIdx = Math.max(addaHighlightIdx - 1, 0);
+            updateHighlight(addaResults, addaHighlightIdx);
+        }
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        let target = items[addaHighlightIdx] || items[0];
+        if (target) {
+            if (target.dataset.addaName) {
+                pickAddaName(target.dataset.addaName);
+            } else {
+                pickCustomAdda(addaSearch.value.trim());
+            }
+        } else if (addaSearch.value.trim()) {
+            pickCustomAdda(addaSearch.value.trim());
+        }
+    }
+});
+
+function pickAddaName(name) {
+    selectedAdda = { id: null, name: name };
+    addaSearch.value = name;
+    addaIdInput.value = '';
+    addaNameInput.value = name;
+    addaResults.style.display = 'none';
+    addaHighlightIdx = -1;
+    addaHint.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> ' + escHtml(name) + ' selected. Enter number below.</span>';
+    updateAddaPreview();
+}
+
+function pickCustomAdda(name) {
+    selectedAdda = { id: null, name: name };
+    addaSearch.value = name;
+    addaIdInput.value = '';
+    addaNameInput.value = name;
+    addaResults.style.display = 'none';
+    addaHighlightIdx = -1;
+    const num = (addaNumberInput.value || '').trim();
+    addaHint.innerHTML = '<span class="text-warning"><i class="bi bi-plus-circle"></i> New adda: "' + escHtml(name + (num ? ' - ' + num : '')) + '"</span>';
+    updateAddaPreview();
+}
+
+addaNumberInput.addEventListener('input', function() {
+    updateAddaPreview();
+});
+
+addaSearch.addEventListener('input', updateAddaPreview);
+
+function renderItems() {
+    if (addedItems.length === 0) {
+        itemsList.innerHTML = '';
+        noItemsMsg.style.display = 'block';
+    } else {
+        noItemsMsg.style.display = 'none';
+        itemsList.innerHTML = addedItems.map((it, idx) =>
+            '<div class="item-row d-flex justify-content-between align-items-center">' +
+                '<div>' +
+                    '<strong>' + escHtml(it.item_code) + '</strong> — ' + escHtml(it.name) +
+                    ' <span class="badge bg-secondary">x' + it.quantity + '</span>' +
+                '</div>' +
+                '<button type="button" class="btn btn-sm btn-outline-danger" onclick="removeItem(' + idx + ')">' +
+                    '<i class="bi bi-x"></i>' +
+                '</button>' +
+            '</div>'
+        ).join('');
+    }
+    itemsJsonInput.value = JSON.stringify(
+        addedItems.map(it => ({ item_id: it.item_id, quantity: it.quantity }))
+    );
+}
+
+function removeItem(idx) {
+    addedItems.splice(idx, 1);
+    renderItems();
+}
+
+// ===== Close dropdowns on outside click =====
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#itemSearch') && !e.target.closest('#itemResults')) {
+        itemResults.style.display = 'none';
+    }
+    if (!e.target.closest('#addaSearch') && !e.target.closest('#addaResults')) {
+        addaResults.style.display = 'none';
+    }
+});
+itemResults.addEventListener('mousedown', function(e) { e.preventDefault(); });
+addaResults.addEventListener('mousedown', function(e) { e.preventDefault(); });
+
+document.getElementById('deliveryPaid').addEventListener('change', function() {
+    document.getElementById('deliveryAmountGroup').style.display = 'none';
+    document.getElementById('deliveryAmountInput').value = '';
+});
+document.getElementById('deliveryNotPaid').addEventListener('change', function() {
+    document.getElementById('deliveryAmountGroup').style.display = 'block';
+    document.getElementById('deliveryAmountInput').focus();
+});
+
+document.getElementById('editForm').addEventListener('submit', function(e) {
+    if (addedItems.length === 0) {
+        e.preventDefault();
+        alert('Please add at least one item.');
+        itemSearch.focus();
+        return;
+    }
+
+    updateAddaPreview();
+
+    if (!addaSearch.value.trim() || !addaNumberInput.value.trim()) {
+        e.preventDefault();
+        alert('Please enter adda name and adda number.');
+        addaSearch.focus();
+    }
+});
+
+function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+</script>
+{% endblock %}

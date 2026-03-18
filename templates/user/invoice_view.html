@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Invoice {{ inv.invoice_number }}{% endblock %}
+{% block content %}
+
+<div class="card invoice-card">
+    <!-- Invoice Header -->
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-receipt"></i> {{ inv.invoice_number }}</span>
+        <div>
+            {% if inv.status == 'pending' %}
+                <span class="badge bg-warning text-dark">Pending</span>
+            {% elif inv.status == 'approved' %}
+                <span class="badge bg-success">Approved</span>
+            {% else %}
+                <span class="badge bg-danger">Rejected</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card-body">
+        <!-- Invoice Info -->
+        <div class="row mb-3 invoice-info">
+            <div class="col-6">
+                <small class="text-muted d-block">Party</small>
+                <strong>{{ inv.parties.name if inv.parties else '-' }}</strong>
+            </div>
+            <div class="col-6 text-end">
+                <small class="text-muted d-block">Invoice Date</small>
+                <strong>{{ inv.invoice_date }}</strong>
+            </div>
+        </div>
+
+        <div class="row mb-3 invoice-info">
+            <div class="col-6">
+                <small class="text-muted d-block">Delivery Adda</small>
+                <strong>{% if inv.addas %}{{ inv.addas.name }}{% if inv.addas.number %} - {{ inv.addas.number }}{% endif %}{% else %}-{% endif %}</strong>
+            </div>
+            <div class="col-6 text-end">
+                <small class="text-muted d-block">Delivery</small>
+                {% if inv.delivery_paid %}
+                    <span class="badge bg-success">Paid</span>
+                {% else %}
+                    <strong class="text-danger">₹{{ inv.delivery_amount }}</strong>
+                {% endif %}
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- Items Table with Carton Calculation -->
+        <h6 class="fw-bold mb-2"><i class="bi bi-list-check"></i> Items</h6>
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:5%">#</th>
+                        <th style="width:18%">Code</th>
+                        <th>Item Name</th>
+                        <th style="width:10%" class="text-end">Qty</th>
+                        <th style="width:25%">Cartons</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set total_qty = namespace(val=0) %}
+                    {% set total_cartons = namespace(val=0) %}
+                    {% set total_loose = namespace(val=0) %}
+                    {% for li in inv.invoice_items %}
+                    {% set item = li['items'] %}
+                    {% set bq = item['box_qty'] if item and item['box_qty'] and item['box_qty'] > 0 else 1 %}
+                    {% set cartons = (li.quantity // bq) %}
+                    {% set loose = (li.quantity % bq) %}
+                    {% set total_qty.val = total_qty.val + li.quantity %}
+                    {% set total_cartons.val = total_cartons.val + cartons %}
+                    {% set total_loose.val = total_loose.val + loose %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td><code>{{ item['item_code'] if item else '?' }}</code></td>
+                        <td>{{ item['name'] if item else '-' }}</td>
+                        <td class="text-end fw-bold">{{ li.quantity }}</td>
+                        <td>
+                            <span class="badge bg-primary">{{ cartons }} ctn</span>
+                            {% if loose > 0 %}
+                                <span class="badge bg-info text-dark">{{ loose }} pcs</span>
+                            {% endif %}
+                            <small class="text-muted d-block" style="font-size:11px">
+                                (1 ctn = {{ bq }} pcs)
+                            </small>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light">
+                    <tr>
+                        <td colspan="3" class="text-end fw-bold">Total</td>
+                        <td class="text-end fw-bold">{{ total_qty.val }}</td>
+                        <td>
+                            <span class="badge bg-primary">{{ total_cartons.val }} ctn</span>
+                            {% if total_loose.val > 0 %}
+                                <span class="badge bg-info text-dark">{{ total_loose.val }} pcs</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <hr>
+
+        <div class="text-muted text-center" style="font-size:12px">
+            Created: {{ inv.created_at[:19] | replace('T', ' ') if inv.created_at else '-' }}
+        </div>
+    </div>
+</div>
+
+<!-- Action Buttons -->
+<div class="d-flex gap-2 mb-4">
+    {% if inv.status == 'pending' %}
+    <a href="{{ url_for('user.edit_invoice', inv_id=inv.id) }}"
+       class="btn btn-warning flex-fill">
+        <i class="bi bi-pencil-square"></i> Edit Invoice
+    </a>
+    {% endif %}
+    <a href="{{ url_for('user.home') }}" class="btn btn-outline-secondary flex-fill">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+{% endblock %}

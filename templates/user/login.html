@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}User Login{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center mt-4">
+    <div class="col-12 col-md-5 col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-info text-white text-center">
+                <i class="bi bi-person-lock"></i> User Login
+            </div>
+            <div class="card-body">
+                {% set inline_error = login_error if login_error else session.get('user_login_error') %}
+                {% if inline_error %}
+                <div class="alert alert-danger py-2" style="font-size:13px; white-space:pre-wrap; word-break:break-word;">
+                    <strong>Supabase Query Error:</strong><br>
+                    {{ inline_error }}
+                </div>
+                {% endif %}
+                {% if login_debug %}
+                <div class="alert alert-secondary py-2" style="font-size:12px; white-space:pre-wrap; word-break:break-word;">
+                    <strong>Login Debug:</strong><br>
+                    {{ login_debug }}
+                </div>
+                {% endif %}
+                {% if login_sql %}
+                <div class="alert alert-warning py-2" style="font-size:12px; white-space:pre-wrap; word-break:break-word;">
+                    <strong>Raw SQL:</strong><br>
+                    {{ login_sql }}
+                </div>
+                {% endif %}
+                <form method="POST" action="{{ url_for('user.login') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <input type="password" name="password" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-info w-100 btn-lg text-white">Login</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

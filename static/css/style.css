@@ -1,0 +1,147 @@
+/* ===== Mobile-first base styles ===== */
+* { box-sizing: border-box; }
+
+body {
+    font-size: 15px;
+    background: #f5f6fa;
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Cards */
+.card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    margin-bottom: 1rem;
+}
+.card-header {
+    border-radius: 12px 12px 0 0 !important;
+    font-weight: 600;
+}
+
+/* Form controls - bigger touch targets */
+.form-control, .form-select {
+    font-size: 16px !important;   /* prevents iOS zoom */
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+}
+
+/* Buttons */
+.btn {
+    border-radius: 8px;
+    padding: 0.55rem 1.2rem;
+    font-weight: 500;
+}
+.btn-lg {
+    padding: 0.75rem 1.5rem;
+    font-size: 1.1rem;
+}
+
+/* Tables on mobile */
+.table-responsive {
+    border-radius: 8px;
+}
+.table th, .table td {
+    white-space: nowrap;
+    font-size: 14px;
+    padding: 0.5rem;
+}
+
+/* Entry cards on user page */
+.entry-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+/* Section headings */
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    color: #333;
+}
+
+/* Floating action button */
+.fab {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 1000;
+}
+
+/* Admin sidebar on larger screens */
+@media (min-width: 768px) {
+    .admin-layout {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 1rem;
+    }
+}
+
+/* Smooth scrolling */
+html { scroll-behavior: smooth; }
+
+/* Autocomplete dropdown */
+.autocomplete-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0 0 8px 8px;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 1050;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+.autocomplete-item {
+    padding: 0.6rem 0.75rem;
+    cursor: pointer;
+    font-size: 14px;
+    border-bottom: 1px solid #f0f0f0;
+}
+.autocomplete-item:last-child { border-bottom: none; }
+.autocomplete-item:hover,
+.autocomplete-item:active,
+.autocomplete-item.autocomplete-active {
+    background: #e9ecef;
+}
+
+/* Added items list rows */
+.item-row {
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid #eee;
+    font-size: 14px;
+}
+.item-row:last-child { border-bottom: none; }
+
+/* Invoice view card */
+.invoice-card .card-body { padding: 1.25rem; }
+.invoice-info strong { font-size: 15px; }
+.invoice-card table code { font-size: 13px; }
+.invoice-card tfoot td { background: #f8f9fa; }
+
+/* Loading spinner */
+.spinner-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}

@@ -1,0 +1,564 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+
+<h5 class="mb-3"><i class="bi bi-gear-fill"></i> Admin Dashboard</h5>
+
+<!-- ===== PENDING INVOICES ===== -->
+<div class="card" id="pending">
+    <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-hourglass-split"></i> Pending Invoices ({{ pending|length }})</span>
+        <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#pendingSection">
+            <i class="bi bi-chevron-down"></i> Toggle
+        </button>
+    </div>
+    <div class="collapse show" id="pendingSection">
+    {% if pending %}
+    <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+            <thead>
+                <tr>
+                    <th>Inv #</th><th>Party</th><th>Items</th>
+                    <th>Adda</th><th>Delivery</th><th>Date</th><th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inv in pending %}
+                <tr>
+                    <td><small class="fw-bold">{{ inv.invoice_number }}</small></td>
+                    <td>{{ inv.parties.name if inv.parties else '-' }}</td>
+                    <td>
+                        {% for li in inv.invoice_items %}
+                        {% set item = li['items'] %}
+                        {% set bq = item['box_qty'] if item and item['box_qty'] and item['box_qty'] > 0 else 1 %}
+                        {% set cartons = (li.quantity // bq) %}
+                        {% set loose = (li.quantity % bq) %}
+                        <div style="font-size:13px">
+                            <small class="text-muted">{{ item['item_code'] if item else '?' }}</small>
+                            {{ item['name'] if item else '-' }}
+                            <span class="badge bg-secondary">x{{ li.quantity }}</span>
+                            <span class="badge bg-info text-dark" style="font-size:10px">Disc {{ "%.2f"|format(li.discount if li.discount is not none else (item['discount'] if item and item['discount'] is not none else 0)) }}%</span>
+                            <span class="badge bg-primary" style="font-size:10px">{{ cartons }}ctn{% if loose > 0 %}+{{ loose }}{% endif %}</span>
+                        </div>
+                        {% endfor %}
+                    </td>
+                    <td>{% if inv.addas %}{{ inv.addas.name }}{% if inv.addas.number %} - {{ inv.addas.number }}{% endif %}{% else %}-{% endif %}</td>
+                    <td>
+                        {% if inv.delivery_paid %}
+                            <span class="badge bg-success">Paid</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">₹{{ inv.delivery_amount }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ inv.invoice_date }}</td>
+                    <td class="text-nowrap">
+                        <a href="{{ url_for('admin.review_invoice', inv_id=inv.id) }}"
+                           class="btn btn-sm btn-success">
+                            <i class="bi bi-eye"></i> Review
+                        </a>
+                        <a href="{{ url_for('admin.delete_invoice', inv_id=inv.id) }}"
+                           class="btn btn-sm btn-outline-danger"
+                           onclick="return confirm('Delete permanently?')">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center text-muted">No pending invoices.</div>
+    {% endif %}
+    </div>
+</div>
+
+<!-- ===== APPROVED INVOICES ===== -->
+<div class="card" id="approved">
+    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-check-circle-fill"></i> Approved Invoices</span>
+        <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#approvedSection">
+            <i class="bi bi-chevron-down"></i> Toggle
+        </button>
+    </div>
+    <div class="collapse" id="approvedSection">
+    {% if approved %}
+    <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+            <thead>
+                <tr>
+                    <th>Inv #</th><th>Party</th><th>Items</th>
+                    <th>Warehouse</th><th>Adda</th><th>Date</th><th>Approved</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in approved %}
+                <tr>
+                    <td><small class="fw-bold">{{ a.invoice_number }}</small></td>
+                    <td>{{ a.parties.name if a.parties else '-' }}</td>
+                    <td>
+                        {% for li in a.approved_invoice_items %}
+                        {% set item = li['items'] %}
+                        {% set bq = item['box_qty'] if item and item['box_qty'] and item['box_qty'] > 0 else 1 %}
+                        {% set cartons = (li.quantity // bq) %}
+                        {% set loose = (li.quantity % bq) %}
+                        <div style="font-size:13px">
+                            <small class="text-muted">{{ item['item_code'] if item else '?' }}</small>
+                            {{ item['name'] if item else '-' }}
+                            <span class="badge bg-secondary">x{{ li.quantity }}</span>
+                            <span class="badge bg-info text-dark" style="font-size:10px">Disc {{ "%.2f"|format(li.discount if li.discount is not none else (item['discount'] if item and item['discount'] is not none else 0)) }}%</span>
+                            <span class="badge bg-primary" style="font-size:10px">{{ cartons }}ctn{% if loose > 0 %}+{{ loose }}{% endif %}</span>
+                        </div>
+                        {% endfor %}
+                    </td>
+                    <td>{{ a.warehouses.name if a.warehouses else '-' }}</td>
+                    <td>{% if a.addas %}{{ a.addas.name }}{% if a.addas.number %} - {{ a.addas.number }}{% endif %}{% else %}-{% endif %}</td>
+                    <td>{{ a.invoice_date }}</td>
+                    <td>{{ a.approved_at[:10] if a.approved_at else '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center text-muted">No approved invoices yet.</div>
+    {% endif %}
+    </div>
+</div>
+
+<hr>
+<h6 class="text-muted mb-3"><i class="bi bi-database-gear"></i> Manage Data</h6>
+
+<!-- ===== PARTIES ===== -->
+<div class="card" id="parties">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-people-fill"></i> Parties</span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#partyForm">
+                <i class="bi bi-plus"></i> Add
+            </button>
+            <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#partiesSection">
+                <i class="bi bi-chevron-down"></i> Toggle
+            </button>
+        </div>
+    </div>
+    <div class="collapse" id="partiesSection">
+    <div class="collapse" id="partyForm">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin.add_party') }}">
+                <div class="input-group">
+                    <input type="text" name="name" class="form-control" placeholder="Party name" required>
+                    <button class="btn btn-primary">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+            <thead><tr><th>#</th><th>Name</th><th></th></tr></thead>
+            <tbody>
+                {% for p in parties %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ p.name }}</td>
+                    <td>
+                        <a href="{{ url_for('admin.delete_party', pid=p.id) }}"
+                           class="btn btn-sm btn-outline-danger"
+                           onclick="return confirm('Delete {{ p.name }}?')">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    </div>
+</div>
+
+<!-- ===== ITEMS ===== -->
+<div class="card" id="items">
+    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-check"></i> Items</span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#itemForm">
+                <i class="bi bi-plus"></i> Add
+            </button>
+            <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#itemsSection">
+                <i class="bi bi-chevron-down"></i> Toggle
+            </button>
+        </div>
+    </div>
+    <div class="collapse" id="itemsSection">
+    <div class="collapse" id="itemForm">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin.add_item') }}">
+                <div class="mb-2">
+                    <input type="text" name="item_code" class="form-control" placeholder="Item Code (e.g. ITM-001)" required>
+                </div>
+                <div class="mb-2">
+                    <input type="text" name="name" class="form-control" placeholder="Item Name" required>
+                </div>
+                <div class="mb-2">
+                    <input type="number" name="box_qty" class="form-control" placeholder="Pcs per Carton (e.g. 8)" min="1" value="1" required>
+                </div>
+                <div class="mb-2">
+                    <input type="number" name="discount" class="form-control" placeholder="Default Discount %" min="0" step="0.01" value="0">
+                </div>
+                <button class="btn btn-info w-100">Add Item</button>
+            </form>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+            <thead><tr><th>#</th><th>Code</th><th>Name</th><th>Pcs/Ctn</th><th>Discount %</th><th></th></tr></thead>
+            <tbody>
+                {% for i in items %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td><code>{{ i.item_code }}</code></td>
+                    <td>{{ i.name }}</td>
+                    <td><span class="badge bg-primary">{{ i.box_qty }}</span></td>
+                    <td>
+                        <form method="POST" action="{{ url_for('admin.update_item', iid=i.id) }}" class="d-flex gap-1">
+                            <input type="number" name="discount" class="form-control form-control-sm"
+                                   value="{{ i.discount if i.discount is not none else 0 }}" min="0" step="0.01" style="max-width:110px">
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-check"></i>
+                            </button>
+                        </form>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('admin.delete_item', iid=i.id) }}"
+                           class="btn btn-sm btn-outline-danger"
+                           onclick="return confirm('Delete?')">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    </div>
+</div>
+
+<!-- ===== ADDAS ===== -->
+<div class="card" id="addas">
+    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-geo-alt-fill"></i> Delivery Addas</span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#addaForm">
+                <i class="bi bi-plus"></i> Add
+            </button>
+            <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#addasSection">
+                <i class="bi bi-chevron-down"></i> Toggle
+            </button>
+        </div>
+    </div>
+    <div class="collapse" id="addasSection">
+    <div class="collapse" id="addaForm">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin.add_adda') }}">
+                <div class="row g-2">
+                    <div class="col-7">
+                        <input type="text" name="name" class="form-control" placeholder="Adda name" required>
+                    </div>
+                    <div class="col-3">
+                        <input type="text" name="number" class="form-control" placeholder="Number">
+                    </div>
+                    <div class="col-2 d-grid">
+                        <button class="btn btn-secondary">Add</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+            <thead><tr><th>#</th><th>Name</th><th>Number</th><th></th></tr></thead>
+            <tbody>
+                {% for a in addas %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>
+                        <span id="addaName{{ a.id }}">{{ a.name }}</span>
+                    </td>
+                    <td>
+                        <span id="addaNumber{{ a.id }}">{{ a.number if a.number else '-' }}</span>
+                        <form method="POST" action="{{ url_for('admin.rename_adda', aid=a.id) }}"
+                              id="addaRenameForm{{ a.id }}" style="display:none;" class="d-flex gap-1 mt-1">
+                            <input type="text" name="name" class="form-control form-control-sm"
+                                   value="{{ a.name }}" required>
+                            <input type="text" name="number" class="form-control form-control-sm"
+                                   value="{{ a.number if a.number else '' }}" placeholder="Number">
+                            <button class="btn btn-sm btn-success" type="submit"><i class="bi bi-check"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary" type="button"
+                                    onclick="toggleRename({{ a.id }}, false)"><i class="bi bi-x"></i></button>
+                        </form>
+                    </td>
+                    <td class="text-nowrap">
+                        <button class="btn btn-sm btn-outline-primary" onclick="toggleRename({{ a.id }}, true)"
+                                id="addaRenameBtn{{ a.id }}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <a href="{{ url_for('admin.delete_adda', aid=a.id) }}"
+                           class="btn btn-sm btn-outline-danger"
+                           onclick="return confirm('Delete {{ a.name }}?')">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    </div>
+</div>
+
+<!-- ===== WAREHOUSE STOCK ===== -->
+<div class="card" id="stock">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-building"></i> Warehouse Stock</span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#stockForm">
+                <i class="bi bi-plus"></i> Add Stock
+            </button>
+            <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#stockSection">
+                <i class="bi bi-chevron-down"></i> Toggle
+            </button>
+        </div>
+    </div>
+    <div class="collapse show" id="stockSection">
+    <div class="collapse" id="stockForm">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin.add_stock') }}">
+                <div class="mb-2">
+                    <select name="warehouse_id" class="form-select" required>
+                        <option value="">-- Select Warehouse --</option>
+                        {% for wh in warehouses %}
+                        <option value="{{ wh.id }}">{{ wh.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <select name="item_id" class="form-select" required>
+                        <option value="">-- Select Item --</option>
+                        {% for i in items %}
+                        <option value="{{ i.id }}">{{ i.item_code }} — {{ i.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <input type="number" name="quantity" class="form-control"
+                           placeholder="Quantity to add" min="1" required>
+                </div>
+                <button class="btn btn-dark w-100">Add Stock</button>
+            </form>
+
+            <hr>
+
+            <form method="POST" action="{{ url_for('admin.upload_stock_excel') }}" enctype="multipart/form-data">
+                <div class="mb-2">
+                    <label class="form-label fw-bold mb-1">Bulk Upload from Excel</label>
+                    <select name="warehouse_id" class="form-select" required>
+                        <option value="">-- Select Warehouse --</option>
+                        {% for wh in warehouses %}
+                        <option value="{{ wh.id }}">{{ wh.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <input type="file" name="stock_file" class="form-control" accept=".xlsx,.xlsm" required>
+                </div>
+                <div class="form-text mb-2">
+                    Excel should have columns like <strong>item_name</strong> and <strong>stock</strong>.
+                    Item code also works in the first column. Negative stock values are allowed.
+                </div>
+                <button class="btn btn-outline-dark w-100">
+                    <i class="bi bi-upload"></i> Upload Excel Stock
+                </button>
+            </form>
+        </div>
+    </div>
+    {% if stock %}
+    <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+            <thead>
+                <tr><th>Warehouse</th><th>Item Code</th><th>Item Name</th><th class="text-end">Stock</th></tr>
+            </thead>
+            <tbody>
+                {% for s in stock %}
+                <tr>
+                    <td>{{ s.warehouses.name if s.warehouses else '-' }}</td>
+                    <td><code>{{ s['items']['item_code'] if s['items'] else '?' }}</code></td>
+                    <td>{{ s['items']['name'] if s['items'] else '-' }}</td>
+                    <td class="text-end">
+                        {% if s.stock > 0 %}
+                            <span class="badge bg-success">{{ s.stock }}</span>
+                        {% elif s.stock == 0 %}
+                            <span class="badge bg-secondary">0</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ s.stock }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center text-muted">No stock records yet. Add stock above.</div>
+    {% endif %}
+
+    <div class="card-body border-top">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div>
+                <h6 class="mb-1"><i class="bi bi-diagram-3"></i> Stock Positions</h6>
+                <div class="text-muted" style="font-size:13px">Click a warehouse to view only its stock, including negative balances.</div>
+            </div>
+            <div class="d-flex flex-wrap gap-2" id="warehouseStockFilters">
+                <button type="button" class="btn btn-sm btn-primary stock-filter-btn active" data-warehouse-filter="all">
+                    All Warehouses
+                </button>
+                {% for wh in warehouses %}
+                <button type="button" class="btn btn-sm btn-outline-primary stock-filter-btn" data-warehouse-filter="{{ wh.id }}">
+                    {{ wh.name }}
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0" id="warehouseStockTable">
+                <thead class="table-light">
+                    <tr>
+                        <th>Warehouse</th>
+                        <th>Item Code</th>
+                        <th>Item Name</th>
+                        <th class="text-end">Cartons</th>
+                        <th class="text-end">Stock Position</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in stock_totals %}
+                    {% set box_qty = s.box_qty if s.box_qty and s.box_qty > 0 else 1 %}
+                    {% set abs_stock = s.stock if s.stock >= 0 else (s.stock * -1) %}
+                    {% set cartons = abs_stock // box_qty %}
+                    {% set loose = abs_stock % box_qty %}
+                    {% set signed_cartons = cartons if s.stock >= 0 else (cartons * -1) %}
+                    {% set signed_loose = loose if s.stock >= 0 else (loose * -1) %}
+                    <tr class="warehouse-stock-row aggregate-stock-row" data-row-type="aggregate" style="display:none;">
+                        <td class="text-muted">—</td>
+                        <td><code>{{ s.item_code }}</code></td>
+                        <td>{{ s.item_name }}</td>
+                        <td class="text-end">
+                            <span class="badge {{ 'bg-danger' if s.stock < 0 else 'bg-primary' }}">{{ signed_cartons }} ctn</span>
+                            {% if loose > 0 %}
+                                <span class="badge {{ 'bg-danger' if s.stock < 0 else 'bg-info text-dark' }}">{{ signed_loose }} pcs</span>
+                            {% endif %}
+                            <small class="text-muted d-block" style="font-size:11px">1 ctn = {{ box_qty }} pcs</small>
+                        </td>
+                        <td class="text-end">
+                            {% if s.stock > 0 %}
+                                <span class="badge bg-success">{{ s.stock }}</span>
+                            {% elif s.stock == 0 %}
+                                <span class="badge bg-secondary">0</span>
+                            {% else %}
+                                <span class="badge bg-danger">{{ s.stock }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+
+                    {% for s in stock_positions %}
+                    {% set box_qty = s.box_qty if s.box_qty and s.box_qty > 0 else 1 %}
+                    {% set abs_stock = s.stock if s.stock >= 0 else (s.stock * -1) %}
+                    {% set cartons = abs_stock // box_qty %}
+                    {% set loose = abs_stock % box_qty %}
+                    {% set signed_cartons = cartons if s.stock >= 0 else (cartons * -1) %}
+                    {% set signed_loose = loose if s.stock >= 0 else (loose * -1) %}
+                    <tr class="warehouse-stock-row" data-row-type="warehouse" data-warehouse-id="{{ s.warehouse_id }}" style="display:none;">
+                        <td>{{ s.warehouse_name }}</td>
+                        <td><code>{{ s.item_code }}</code></td>
+                        <td>{{ s.item_name }}</td>
+                        <td class="text-end">
+                            <span class="badge {{ 'bg-danger' if s.stock < 0 else 'bg-primary' }}">{{ signed_cartons }} ctn</span>
+                            {% if loose > 0 %}
+                                <span class="badge {{ 'bg-danger' if s.stock < 0 else 'bg-info text-dark' }}">{{ signed_loose }} pcs</span>
+                            {% endif %}
+                            <small class="text-muted d-block" style="font-size:11px">1 ctn = {{ box_qty }} pcs</small>
+                        </td>
+                        <td class="text-end">
+                            {% if s.stock > 0 %}
+                                <span class="badge bg-success">{{ s.stock }}</span>
+                            {% elif s.stock == 0 %}
+                                <span class="badge bg-secondary">0</span>
+                            {% else %}
+                                <span class="badge bg-danger">{{ s.stock }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div id="warehouseStockEmpty" class="text-center text-muted py-3" style="display:none; font-size:13px;">
+            No stock rows found for the selected warehouse.
+        </div>
+    </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleRename(aid, show) {
+    document.getElementById('addaName' + aid).style.display = show ? 'none' : '';
+    document.getElementById('addaNumber' + aid).style.display = show ? 'none' : '';
+    document.getElementById('addaRenameForm' + aid).style.display = show ? 'flex' : 'none';
+    document.getElementById('addaRenameBtn' + aid).style.display = show ? 'none' : '';
+    if (show) {
+        document.getElementById('addaRenameForm' + aid).querySelector('input').focus();
+    }
+}
+
+const stockFilterButtons = document.querySelectorAll('.stock-filter-btn');
+const warehouseStockRows = document.querySelectorAll('.warehouse-stock-row');
+const warehouseStockEmpty = document.getElementById('warehouseStockEmpty');
+
+function filterWarehouseStock(warehouseId) {
+    let visibleCount = 0;
+    warehouseStockRows.forEach((row) => {
+        let matches = false;
+        if (warehouseId === 'all') {
+            matches = row.dataset.rowType === 'aggregate';
+        } else {
+            matches = row.dataset.rowType === 'warehouse' && row.dataset.warehouseId === warehouseId;
+        }
+        row.style.display = matches ? '' : 'none';
+        if (matches) visibleCount += 1;
+    });
+
+    if (warehouseStockEmpty) {
+        warehouseStockEmpty.style.display = visibleCount === 0 ? '' : 'none';
+    }
+
+    stockFilterButtons.forEach((button) => {
+        const active = button.dataset.warehouseFilter === warehouseId;
+        button.classList.toggle('btn-primary', active);
+        button.classList.toggle('btn-outline-primary', !active);
+        button.classList.toggle('active', active);
+    });
+}
+
+stockFilterButtons.forEach((button) => {
+    button.addEventListener('click', function() {
+        filterWarehouseStock(this.dataset.warehouseFilter);
+    });
+});
+
+filterWarehouseStock('all');
+</script>
+{% endblock %}
