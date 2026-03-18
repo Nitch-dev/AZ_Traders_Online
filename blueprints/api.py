@@ -1,7 +1,14 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from supabase_client import get_supabase
 
 api_bp = Blueprint("api", __name__)
+
+
+def _as_int(value):
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
 
 
 @api_bp.route("/api/approved-invoices", methods=["GET"])
@@ -61,3 +68,101 @@ def approved_invoices():
         )
 
     return jsonify(results)
+
+
+@api_bp.route("/api/stock/add", methods=["POST"])
+def add_stock():
+    """Receive external stock payload and add quantities to warehouse stock.
+
+    Expected JSON:
+    {
+      "invoiceNo": "123",
+      "billNo": "ABC456",
+      "items": [
+        {"WH": "1", "Qty": "10", "Name": "Product A"}
+      ]
+    }
+    """
+    payload = request.get_json(silent=True) or {}
+    items = payload.get("items")
+    if not isinstance(items, list) or not items:
+        return jsonify({"error": "Invalid payload. 'items' must be a non-empty array."}), 400
+
+    sb = get_supabase()
+    results = []
+    errors = []
+
+    for idx, row in enumerate(items, start=1):
+        wh_id = _as_int((row or {}).get("WH"))
+        qty = _as_int((row or {}).get("Qty"))
+        item_name = str((row or {}).get("Name") or "").strip()
+
+        if not wh_id or not item_name or qty is None:
+            errors.append({
+                "row": idx,
+                "error": "Each item must include valid WH (warehouse id), Qty, and Name.",
+            })
+            continue
+
+        if qty <= 0:
+            errors.append({"row": idx, "error": "Qty must be greater than 0."})
+            continue
+
+        warehouse = sb.table("warehouses").select("id, name").eq("id", wh_id).limit(1).execute().data
+        if not warehouse:
+            errors.append({"row": idx, "error": f"Warehouse not found for WH={wh_id}."})
+            continue
+
+        item_row = sb.table("items").select("id, name").ilike("name", item_name).limit(1).execute().data
+        if not item_row:
+            errors.append({"row": idx, "error": f"Item not found for Name='{item_name}'."})
+            continue
+
+        item_id = int(item_row[0]["id"])
+        existing_stock = (
+            sb.table("warehouse_stock")
+            .select("id, stock")
+            .eq("warehouse_id", wh_id)
+            .eq("item_id", item_id)
+            .limit(1)
+            .execute()
+            .data
+        )
+
+        if existing_stock:
+            stock_id = existing_stock[0]["id"]
+            prev_stock = int(existing_stock[0].get("stock") or 0)
+            new_stock = prev_stock + qty
+            sb.table("warehouse_stock").update({"stock": new_stock}).eq("id", stock_id).execute()
+        else:
+            prev_stock = 0
+            new_stock = qty
+            sb.table("warehouse_stock").insert(
+                {"warehouse_id": wh_id, "item_id": item_id, "stock": new_stock}
+            ).execute()
+
+        results.append(
+            {
+                "row": idx,
+                "warehouse_id": wh_id,
+                "item_name": item_row[0]["name"],
+                "added_qty": qty,
+                "previous_stock": prev_stock,
+                "new_stock": new_stock,
+            }
+        )
+
+    status_code = 200 if not errors else (207 if results else 400)
+    return (
+        jsonify(
+            {
+                "invoiceNo": payload.get("invoiceNo"),
+                "billNo": payload.get("billNo"),
+                "processed": len(results),
+                "failed": len(errors),
+                "results": results,
+                "errors": errors,
+            }
+        ),
+        status_code,
+    )
