@@ -18,7 +18,7 @@ def approved_invoices():
     # Fetch all approved invoices with party and adda names
     invoices = (
         sb.table("approved_invoices")
-        .select("*, parties(name), addas(name, number), warehouses(name)")
+        .select("*, parties(name), addas(name, number), warehouses(id)")
         .order("approved_at", desc=True)
         .execute()
         .data
@@ -48,7 +48,7 @@ def approved_invoices():
                 "adda": adda_display,
                 "adda_name": adda_name,
                 "adda_number": adda_number,
-                "warehouse": inv["warehouses"]["name"] if inv.get("warehouses") else "",
+                "warehouse": inv["warehouses"]["id"] if inv.get("warehouses") else inv.get("warehouse_id"),
                 "delivery_paid": inv["delivery_paid"],
                 "delivery_amount": float(inv["delivery_amount"]),
                 "invoice_date": inv["invoice_date"],
