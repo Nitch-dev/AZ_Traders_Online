@@ -95,12 +95,12 @@ def add_stock():
     for idx, row in enumerate(items, start=1):
         wh_id = _as_int((row or {}).get("WH"))
         qty = _as_int((row or {}).get("Qty"))
-        item_name = str((row or {}).get("Name") or "").strip()
+        item_code = str((row or {}).get("Name") or "").strip()
 
-        if not wh_id or not item_name or qty is None:
+        if not wh_id or not item_code or qty is None:
             errors.append({
                 "row": idx,
-                "error": "Each item must include valid WH (warehouse id), Qty, and Name.",
+                "error": "Each item must include valid WH (warehouse id), Qty, and Name (item code).",
             })
             continue
 
@@ -113,9 +113,16 @@ def add_stock():
             errors.append({"row": idx, "error": f"Warehouse not found for WH={wh_id}."})
             continue
 
-        item_row = sb.table("items").select("id, name").ilike("name", item_name).limit(1).execute().data
+        item_row = (
+            sb.table("items")
+            .select("id, item_code, name")
+            .ilike("item_code", item_code)
+            .limit(1)
+            .execute()
+            .data
+        )
         if not item_row:
-            errors.append({"row": idx, "error": f"Item not found for Name='{item_name}'."})
+            errors.append({"row": idx, "error": f"Item not found for item code='{item_code}'."})
             continue
 
         item_id = int(item_row[0]["id"])
@@ -145,6 +152,7 @@ def add_stock():
             {
                 "row": idx,
                 "warehouse_id": wh_id,
+                "item_code": item_row[0]["item_code"],
                 "item_name": item_row[0]["name"],
                 "added_qty": qty,
                 "previous_stock": prev_stock,
