@@ -332,6 +332,100 @@
     <div class="collapse show" id="stockSection">
     <div class="collapse" id="stockForm">
         <div class="card-body">
+
+            <!-- ===== QUICK ADD (mobile-friendly, no page reload) ===== -->
+            <div class="mb-3">
+                <h6 class="fw-bold mb-2"><i class="bi bi-lightning-fill text-warning"></i> Quick Add</h6>
+                <div class="mb-2">
+                    <select id="quickWh" class="form-select form-select-lg">
+                        <option value="">-- Select Warehouse --</option>
+                        {% for wh in warehouses %}
+                        <option value="{{ wh.id }}">{{ wh.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <input type="text" id="quickItem" class="form-control form-control-lg"
+                           placeholder="Item code / name" autocomplete="off" autocorrect="off"
+                           autocapitalize="off" spellcheck="false">
+                </div>
+                <div class="mb-2">
+                    <input type="number" id="quickQty" class="form-control form-control-lg"
+                           placeholder="Quantity" min="1" inputmode="numeric">
+                </div>
+                <button type="button" id="quickAddBtn" class="btn btn-success btn-lg w-100 fw-bold">
+                    <i class="bi bi-plus-circle"></i> Add Stock
+                </button>
+                <div id="quickAddMsg" class="mt-2" style="display:none;"></div>
+            </div>
+
+            <script>
+            (function () {
+                const btn = document.getElementById('quickAddBtn');
+                const msgBox = document.getElementById('quickAddMsg');
+
+                function doQuickAdd() {
+                    const wh  = document.getElementById('quickWh').value.trim();
+                    const item = document.getElementById('quickItem').value.trim();
+                    const qty  = document.getElementById('quickQty').value.trim();
+
+                    if (!wh || !item || !qty || parseInt(qty) < 1) {
+                        showMsg('Please fill warehouse, item code and quantity.', 'warning');
+                        return;
+                    }
+
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Adding…';
+
+                    fetch('/api/stock/add', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ items: [{ WH: wh, Qty: qty, Name: item }] })
+                    })
+                    .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, data: d })))
+                    .then(({ ok, status, data }) => {
+                        if (data.errors && data.errors.length) {
+                            showMsg('Error: ' + data.errors[0].error, 'danger');
+                        } else {
+                            const r = data.results && data.results[0];
+                            const msg = r
+                                ? `✓ Added ${r.added_qty} × ${r.item_code} (${r.item_name}) → stock now ${r.new_stock}`
+                                : '✓ Stock added!';
+                            showMsg(msg, 'success');
+                            document.getElementById('quickItem').value = '';
+                            document.getElementById('quickQty').value = '';
+                            document.getElementById('quickItem').focus();
+                        }
+                    })
+                    .catch(() => showMsg('Network error. Please try again.', 'danger'))
+                    .finally(() => {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-plus-circle"></i> Add Stock';
+                    });
+                }
+
+                btn.addEventListener('click', doQuickAdd);
+
+                // Also allow Enter on qty input to trigger add
+                document.getElementById('quickQty').addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') { e.preventDefault(); doQuickAdd(); }
+                });
+
+                function showMsg(text, type) {
+                    msgBox.className = 'mt-2 alert alert-' + type + ' py-2 mb-0';
+                    msgBox.textContent = text;
+                    msgBox.style.display = '';
+                    clearTimeout(msgBox._t);
+                    if (type === 'success') {
+                        msgBox._t = setTimeout(() => { msgBox.style.display = 'none'; }, 4000);
+                    }
+                }
+            })();
+            </script>
+
+            <hr class="my-3">
+            <p class="text-muted small mb-2">Or use the classic form below:</p>
+
             <form method="POST" action="{{ url_for('admin.add_stock') }}">
                 <div class="mb-2">
                     <select name="warehouse_id" class="form-select" required>
