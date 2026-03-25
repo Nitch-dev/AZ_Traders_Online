@@ -36,13 +36,18 @@
                             <div id="itemResults" class="autocomplete-dropdown"></div>
                         </div>
                         <div class="col-4">
-                            <input type="number" id="qtyInput" class="form-control"
-                                   placeholder="Qty" min="1" disabled>
+                            <div class="input-group">
+                                <input type="number" id="qtyInput" class="form-control"
+                                       placeholder="Qty" min="1" disabled>
+                                <button type="button" id="addItemBtn" class="btn btn-success" disabled title="Add item">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div id="stockHint" class="text-success fw-bold mb-1" style="font-size:12px; display:none;"></div>
                     <div id="itemHint" class="text-muted mb-2" style="font-size:12px">
-                        Search item → select → enter quantity → press Enter to add
+                        Search item → select → enter quantity → press Enter or tap <i class="bi bi-plus-lg"></i> to add
                     </div>
 
                     <div id="itemsList"></div>
@@ -206,6 +211,7 @@ itemSearch.addEventListener('input', function() {
     clearTimeout(searchTimeout);
     selectedItem = null;
     qtyInput.disabled = true;
+    document.getElementById('addItemBtn').disabled = true;
     itemHighlightIdx = -1;
 
     if (q.length < 1) {
@@ -278,6 +284,7 @@ function pickItem(id, code, name, stock) {
     itemResults.style.display = 'none';
     itemHighlightIdx = -1;
     qtyInput.disabled = false;
+    document.getElementById('addItemBtn').disabled = false;
     qtyInput.value = '';
     qtyInput.max = available;
     document.getElementById('stockHint').textContent = 'Available stock: ' + available + ' (Total: ' + totalStock + ')';
@@ -285,31 +292,34 @@ function pickItem(id, code, name, stock) {
     qtyInput.focus();
 }
 
-qtyInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-        e.preventDefault();
-        const qty = parseInt(this.value);
-        if (!selectedItem || !qty || qty < 1) return;
-        if (qty > selectedItem.available) {
-            alert('Not enough stock! Available: ' + selectedItem.available);
-            return;
-        }
-        addedItems.push({
-            item_id: selectedItem.item_id,
-            item_code: selectedItem.item_code,
-            name: selectedItem.name,
-            quantity: qty,
-        });
-        selectedItem = null;
-        itemSearch.value = '';
-        itemSearch.removeAttribute('readonly');
-        qtyInput.value = '';
-        qtyInput.disabled = true;
-        document.getElementById('stockHint').style.display = 'none';
-        itemSearch.focus();
-        renderItems();
+function doAddItem() {
+    const qty = parseInt(qtyInput.value);
+    if (!selectedItem || !qty || qty < 1) return;
+    if (qty > selectedItem.available) {
+        alert('Not enough stock! Available: ' + selectedItem.available);
+        return;
     }
+    addedItems.push({
+        item_id: selectedItem.item_id,
+        item_code: selectedItem.item_code,
+        name: selectedItem.name,
+        quantity: qty,
+    });
+    selectedItem = null;
+    itemSearch.value = '';
+    itemSearch.removeAttribute('readonly');
+    qtyInput.value = '';
+    qtyInput.disabled = true;
+    document.getElementById('addItemBtn').disabled = true;
+    document.getElementById('stockHint').style.display = 'none';
+    itemSearch.focus();
+    renderItems();
+}
+
+qtyInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); doAddItem(); }
 });
+document.getElementById('addItemBtn').addEventListener('click', doAddItem);
 
 // ===== ADDA autocomplete =====
 addaSearch.addEventListener('input', function() {
