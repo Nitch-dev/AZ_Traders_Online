@@ -56,6 +56,10 @@
                            class="btn btn-sm btn-success">
                             <i class="bi bi-eye"></i> Review
                         </a>
+                        <a href="{{ url_for('admin.review_invoice', inv_id=inv.id) }}"
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-pencil-square"></i> Edit
+                        </a>
                         <a href="{{ url_for('admin.delete_invoice', inv_id=inv.id) }}"
                            class="btn btn-sm btn-outline-danger"
                            onclick="return confirm('Delete permanently?')">

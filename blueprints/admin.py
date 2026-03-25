@@ -94,7 +94,7 @@ def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("is_admin"):
-            return redirect(url_for("admin.login"))
+            return redirect(url_for("user.login"))
         return f(*args, **kwargs)
     return decorated
 
@@ -103,21 +103,43 @@ def admin_required(f):
 @admin_bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form.get("username", "")
-        password = request.form.get("password", "")
-        if username == config.ADMIN_USERNAME and password == config.ADMIN_PASSWORD:
-            session["is_admin"] = True
-            flash("Logged in as admin.", "success")
-            return redirect(url_for("admin.dashboard"))
-        flash("Invalid credentials.", "danger")
-    return render_template("login.html")
+        return redirect(url_for("user.login"), code=307)
+    return redirect(url_for("user.login"))
 
 
 @admin_bp.route("/logout")
 def logout():
     session.pop("is_admin", None)
     flash("Logged out.", "info")
-    return redirect(url_for("user.home"))
+    return redirect(url_for("user.login"))
+
+
+def _update_pending_invoice_line_items(sb, inv_id, form_data):
+    line_items = sb.table("invoice_items").select("id, quantity, discount").eq("invoice_id", inv_id).execute().data
+    for li in line_items:
+        qty_raw = form_data.get(f"item_quantity_{li['id']}", str(li.get("quantity", 0))).strip() or "0"
+        disc_raw = form_data.get(f"item_discount_{li['id']}", str(li.get("discount", 0))).strip() or "0"
+
+        try:
+            quantity = int(qty_raw)
+        except ValueError:
+            return False, "Invalid quantity value provided."
+
+        try:
+            line_discount = float(disc_raw)
+        except ValueError:
+            line_discount = 0.0
+
+        if quantity <= 0:
+            return False, "Quantity must be greater than 0 for every invoice item."
+
+        line_discount = max(0.0, line_discount)
+        sb.table("invoice_items").update({
+            "quantity": quantity,
+            "discount": line_discount,
+        }).eq("id", li["id"]).execute()
+
+    return True, "Invoice line items updated."
 
 
 # ---------- Dashboard ----------
@@ -363,21 +385,14 @@ def approve_invoice(inv_id):
     }).execute()
     approved_id = approved_result.data[0]["id"]
 
+    ok, err = _update_pending_invoice_line_items(sb, inv_id, request.form)
+    if not ok:
+        flash(err, "danger")
+        return redirect(url_for("admin.review_invoice", inv_id=inv_id))
+
     # Copy line items to approved_invoice_items
     line_items = sb.table("invoice_items").select("*").eq("invoice_id", inv_id).execute().data
     if line_items:
-        # Persist any admin-edited per-item discount on pending invoice lines
-        for li in line_items:
-            disc_raw = request.form.get(f"item_discount_{li['id']}", str(li.get("discount", 0))).strip() or "0"
-            try:
-                line_discount = float(disc_raw)
-            except ValueError:
-                line_discount = 0.0
-            line_discount = max(0.0, line_discount)
-
-            sb.table("invoice_items").update({"discount": line_discount}).eq("id", li["id"]).execute()
-            li["discount"] = line_discount
-
         approved_lines = [
             {
                 "approved_invoice_id": approved_id,
@@ -420,6 +435,27 @@ def approve_invoice(inv_id):
     sb.table("invoices").update({"status": "approved"}).eq("id", inv_id).execute()
     flash("Invoice approved! Stock deducted from warehouse.", "success")
     return redirect(url_for("admin.dashboard") + "#pending")
+
+
+@admin_bp.route("/invoices/update/<int:inv_id>", methods=["POST"])
+@admin_required
+def update_invoice(inv_id):
+    sb = get_supabase()
+    rows = sb.table("invoices").select("id, status").eq("id", inv_id).execute().data
+    if not rows:
+        flash("Invoice not found.", "danger")
+        return redirect(url_for("admin.dashboard") + "#pending")
+
+    if rows[0].get("status") != "pending":
+        flash("Only pending invoices can be edited.", "warning")
+        return redirect(url_for("admin.review_invoice", inv_id=inv_id))
+
+    ok, msg = _update_pending_invoice_line_items(sb, inv_id, request.form)
+    if not ok:
+        flash(msg, "danger")
+    else:
+        flash("Invoice changes saved.", "success")
+    return redirect(url_for("admin.review_invoice", inv_id=inv_id))
 
 
 @admin_bp.route("/invoices/reject/<int:inv_id>")

@@ -1,18 +1,18 @@
 {% extends "base.html" %}
-{% block title %}User Login{% endblock %}
+{% block title %}Login{% endblock %}
 {% block content %}
 
 <div class="row justify-content-center mt-4">
     <div class="col-12 col-md-5 col-lg-4">
         <div class="card shadow-sm">
             <div class="card-header bg-info text-white text-center">
-                <i class="bi bi-person-lock"></i> User Login
+                <i class="bi bi-person-lock"></i> Login
             </div>
             <div class="card-body">
                 {% set inline_error = login_error if login_error else session.get('user_login_error') %}
                 {% if inline_error %}
                 <div class="alert alert-danger py-2" style="font-size:13px; white-space:pre-wrap; word-break:break-word;">
-                    <strong>Supabase Query Error:</strong><br>
+                    <strong>Login Error:</strong><br>
                     {{ inline_error }}
                 </div>
                 {% endif %}
@@ -29,6 +29,7 @@
                 </div>
                 {% endif %}
                 <form method="POST" action="{{ url_for('user.login') }}">
+                    <p class="text-muted small mb-3">Use admin credentials for admin dashboard, or user credentials for user pages.</p>
                     <div class="mb-3">
                         <label class="form-label">Username</label>
                         <input type="text" name="username" class="form-control" required>

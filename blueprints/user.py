@@ -82,8 +82,15 @@ def _get_user_record(sb, username):
 
 
 @user_bp.route("/user/login", methods=["GET", "POST"])
+@user_bp.route("/login", methods=["GET", "POST"])
 def login():
+    if session.get("is_admin"):
+        return redirect(url_for("admin.dashboard"))
+
     if session.get("is_user"):
+        role = (session.get("user_role") or "").lower()
+        if role == "order":
+            return redirect(url_for("user.order_home"))
         return redirect(url_for("user.home"))
 
     login_error = session.pop("user_login_error", None)
@@ -93,6 +100,18 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
+
+        # Shared login entry: admin credentials are checked first.
+        if username == config.ADMIN_USERNAME and password == config.ADMIN_PASSWORD:
+            session["is_admin"] = True
+            session.pop("is_user", None)
+            session.pop("user_username", None)
+            session.pop("user_role", None)
+            session.pop("user_login_error", None)
+            session.pop("user_login_debug", None)
+            session.pop("user_login_sql", None)
+            flash("Logged in as admin.", "success")
+            return redirect(url_for("admin.dashboard"))
 
         if not username or not password:
             login_error = "Please enter username and password."
@@ -135,6 +154,7 @@ def login():
             return render_template("user/login.html", login_error=login_error, login_debug=session.get("user_login_debug", ""), login_sql=session.get("user_login_sql", ""))
 
         session["is_user"] = True
+        session.pop("is_admin", None)
         session["user_username"] = username
         session["user_role"] = role
         session.pop("user_login_error", None)
