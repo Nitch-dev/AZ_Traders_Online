@@ -11,6 +11,14 @@ def _as_int(value):
         return None
 
 
+def _get_invoice_number(payload):
+    for key in ("invoice_number", "invoiceNumber", "invoiceNo"):
+        value = (payload or {}).get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
 @api_bp.route("/api/approved-invoices", methods=["GET"])
 def approved_invoices():
     sb = get_supabase()
@@ -18,7 +26,7 @@ def approved_invoices():
     # Fetch all approved invoices with party and adda names
     invoices = (
         sb.table("approved_invoices")
-        .select("*, parties(name), addas(name, number), warehouses(id)")
+        .select("*, parties(name), addas(name, number), warehouses(id), invoices(status)")
         .order("approved_at", desc=True)
         .execute()
         .data
@@ -26,6 +34,10 @@ def approved_invoices():
 
     results = []
     for inv in invoices:
+        invoice_status = ((inv.get("invoices") or {}).get("status") or "").strip()
+        if invoice_status != "approved":
+            continue
+
         adda_name = inv["addas"]["name"] if inv.get("addas") else ""
         adda_number = inv["addas"].get("number") if inv.get("addas") else ""
         adda_number = adda_number or ""
@@ -68,6 +80,53 @@ def approved_invoices():
         )
 
     return jsonify(results)
+
+
+@api_bp.route("/api/invoices/mark-generated", methods=["POST"])
+def mark_invoice_generated():
+    payload = request.get_json(silent=True) or request.form or {}
+    invoice_number = _get_invoice_number(payload)
+
+    if not invoice_number:
+        return jsonify({"error": "invoice_number is required."}), 400
+
+    sb = get_supabase()
+    rows = (
+        sb.table("invoices")
+        .select("id, invoice_number, status")
+        .eq("invoice_number", invoice_number)
+        .limit(1)
+        .execute()
+        .data
+    )
+
+    if not rows:
+        return jsonify({"error": "Invoice not found."}), 404
+
+    invoice = rows[0]
+    current_status = invoice.get("status")
+    if current_status != "approved":
+        return (
+            jsonify(
+                {
+                    "error": "Only approved invoices can be marked as invoiceGenerated.",
+                    "invoice_number": invoice["invoice_number"],
+                    "current_status": current_status,
+                }
+            ),
+            409,
+        )
+
+    sb.table("invoices").update({"status": "invoiceGenerated"}).eq("id", invoice["id"]).execute()
+
+    return jsonify(
+        {
+            "message": "Invoice status updated.",
+            "invoice_number": invoice["invoice_number"],
+            "previous_status": current_status,
+            "status": "invoiceGenerated",
+        }
+    )
 
 
 @api_bp.route("/api/stock/add", methods=["POST"])

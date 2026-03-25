@@ -139,6 +139,8 @@
                     <span class="badge bg-warning text-dark">Pending</span>
                 {% elif inv.status == 'approved' %}
                     <span class="badge bg-success">Approved</span>
+                {% elif inv.status == 'invoiceGenerated' %}
+                    <span class="badge bg-primary">Invoice Generated</span>
                 {% else %}
                     <span class="badge bg-danger">Rejected</span>
                 {% endif %}

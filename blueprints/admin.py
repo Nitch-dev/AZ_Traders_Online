@@ -193,15 +193,25 @@ def dashboard():
     pending = sb.table("invoices").select(
         "*, parties(name), addas(name, number), invoice_items(*, items(item_code, name, box_qty, discount))"
     ).eq("status", "pending").order("created_at", desc=True).execute().data
-    approved = sb.table("approved_invoices").select(
-        "*, parties(name), addas(name, number), warehouses(name), approved_invoice_items(*, items(item_code, name, box_qty, discount))"
+    approved_rows = sb.table("approved_invoices").select(
+        "*, parties(name), addas(name, number), warehouses(name), invoices(status), approved_invoice_items(*, items(item_code, name, box_qty, discount))"
     ).order("approved_at", desc=True).limit(50).execute().data
+
+    approved = []
+    generated = []
+    for row in approved_rows:
+        invoice_status = ((row.get("invoices") or {}).get("status") or "").strip()
+        if invoice_status == "invoiceGenerated":
+            generated.append(row)
+        elif invoice_status == "approved":
+            approved.append(row)
+
     return render_template("dashboard.html",
                            parties=parties, items=items, addas=addas,
                            warehouses=warehouses, stock=stock,
                            stock_positions=stock_positions,
                            stock_totals=stock_totals,
-                           pending=pending, approved=approved)
+                           pending=pending, approved=approved, generated=generated)
 
 
 # ========== PARTIES CRUD ==========

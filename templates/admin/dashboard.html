@@ -80,7 +80,7 @@
 <!-- ===== APPROVED INVOICES ===== -->
 <div class="card" id="approved">
     <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-check-circle-fill"></i> Approved Invoices</span>
+        <span><i class="bi bi-check-circle-fill"></i> Approved Invoices ({{ approved|length }})</span>
         <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#approvedSection">
             <i class="bi bi-chevron-down"></i> Toggle
         </button>
@@ -126,6 +126,59 @@
     </div>
     {% else %}
     <div class="card-body text-center text-muted">No approved invoices yet.</div>
+    {% endif %}
+    </div>
+</div>
+
+<!-- ===== GENERATED INVOICES ===== -->
+<div class="card" id="generated">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-file-earmark-check-fill"></i> Invoice Generated ({{ generated|length }})</span>
+        <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#generatedSection">
+            <i class="bi bi-chevron-down"></i> Toggle
+        </button>
+    </div>
+    <div class="collapse" id="generatedSection">
+    {% if generated %}
+    <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+            <thead>
+                <tr>
+                    <th>Inv #</th><th>Party</th><th>Items</th>
+                    <th>Warehouse</th><th>Adda</th><th>Date</th><th>Approved</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in generated %}
+                <tr>
+                    <td><small class="fw-bold">{{ a.invoice_number }}</small></td>
+                    <td>{{ a.parties.name if a.parties else '-' }}</td>
+                    <td>
+                        {% for li in a.approved_invoice_items %}
+                        {% set item = li['items'] %}
+                        {% set bq = item['box_qty'] if item and item['box_qty'] and item['box_qty'] > 0 else 1 %}
+                        {% set cartons = (li.quantity // bq) %}
+                        {% set loose = (li.quantity % bq) %}
+                        <div style="font-size:13px">
+                            <small class="text-muted">{{ item['item_code'] if item else '?' }}</small>
+                            {{ item['name'] if item else '-' }}
+                            <span class="badge bg-secondary">x{{ li.quantity }}</span>
+                            <span class="badge bg-info text-dark" style="font-size:10px">Disc {{ "%.2f"|format(li.discount if li.discount is not none else (item['discount'] if item and item['discount'] is not none else 0)) }}%</span>
+                            <span class="badge bg-primary" style="font-size:10px">{{ cartons }}ctn{% if loose > 0 %}+{{ loose }}{% endif %}</span>
+                        </div>
+                        {% endfor %}
+                    </td>
+                    <td>{{ a.warehouses.name if a.warehouses else '-' }}</td>
+                    <td>{% if a.addas %}{{ a.addas.name }}{% if a.addas.number %} - {{ a.addas.number }}{% endif %}{% else %}-{% endif %}</td>
+                    <td>{{ a.invoice_date }}</td>
+                    <td>{{ a.approved_at[:10] if a.approved_at else '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center text-muted">No generated invoices yet.</div>
     {% endif %}
     </div>
 </div>

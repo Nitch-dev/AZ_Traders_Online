@@ -50,7 +50,7 @@ CREATE TABLE warehouse_stock (
     UNIQUE(warehouse_id, item_id)
 );
 
--- 6. Invoices (header - pending, awaiting admin approval)
+-- 6. Invoices (header - pending, approved, invoice generated, or rejected)
 CREATE TABLE invoices (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     invoice_number TEXT NOT NULL UNIQUE,
@@ -59,7 +59,7 @@ CREATE TABLE invoices (
     delivery_paid BOOLEAN NOT NULL DEFAULT false,
     delivery_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
     invoice_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'invoiceGenerated', 'rejected')),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
