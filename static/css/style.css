@@ -145,3 +145,112 @@ html { scroll-behavior: smooth; }
     justify-content: center;
     z-index: 2000;
 }
+
+/* Compact stock positions block on admin dashboard */
+#stock .stock-position-compact {
+    padding: 0.65rem 0.75rem;
+    background: #f2f2f2;
+}
+
+#stock .stock-position-toolbar h6 {
+    font-size: 0.95rem;
+}
+
+#stock #warehouseStockFilterSelect {
+    min-width: 180px;
+    font-size: 0.82rem !important;
+    padding: 0.2rem 1.8rem 0.2rem 0.45rem;
+}
+
+#stock .stock-ledger-shell {
+    border: 1px solid #b4b4b4;
+    background: #efefef;
+    padding: 0.4rem;
+}
+
+#stock .stock-ledger-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.45rem;
+}
+
+#stock .stock-ledger-panel {
+    border: 1px solid #a8a8a8;
+    background: #f9f9f9;
+    overflow: hidden;
+}
+
+#stock .stock-ledger-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 12px;
+    line-height: 1.15;
+    color: #1f1f1f;
+}
+
+#stock .stock-ledger-table th,
+#stock .stock-ledger-table td {
+    border: 1px solid #b9b9b9;
+    padding: 0.16rem 0.28rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#stock .stock-ledger-table th {
+    font-weight: 700;
+    background: #e7e7e7;
+}
+
+#stock .stock-ledger-table th:nth-child(1),
+#stock .stock-ledger-table td:nth-child(1) {
+    width: 34px;
+    text-align: center;
+}
+
+#stock .stock-ledger-table th:nth-child(2),
+#stock .stock-ledger-table td:nth-child(2) {
+    width: 74px;
+}
+
+#stock .stock-ledger-table th:nth-child(4),
+#stock .stock-ledger-table td:nth-child(4),
+#stock .stock-ledger-table th:nth-child(5),
+#stock .stock-ledger-table td:nth-child(5),
+#stock .stock-ledger-table th:nth-child(6),
+#stock .stock-ledger-table td:nth-child(6) {
+    width: 52px;
+}
+
+#stock .stock-ledger-code {
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 11px;
+}
+
+#stock .stock-pos {
+    color: #198754;
+    font-weight: 700;
+}
+
+#stock .stock-neg {
+    color: #c1121f;
+    font-weight: 700;
+}
+
+#stock .stock-zero {
+    color: #3f3f3f;
+    font-weight: 600;
+}
+
+#stock .stock-ledger-footer {
+    font-size: 13px;
+    color: #151515;
+    padding: 0.15rem 0.2rem;
+}
+
+@media (max-width: 991.98px) {
+    #stock .stock-ledger-grid {
+        grid-template-columns: 1fr;
+    }
+}

@@ -16,7 +16,7 @@
                 <select name="party_id" id="partySelect" class="form-select" required>
                     <option value="">-- Select Party --</option>
                     {% for p in parties %}
-                    <option value="{{ p.id }}">{{ p.name }}</option>
+                    <option value="{{ p.id }}">{{ p.name }}{% if p.addr %} - {{ p.addr }}{% endif %}</option>
                     {% endfor %}
                 </select>
             </div>

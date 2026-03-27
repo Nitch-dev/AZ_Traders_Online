@@ -16,7 +16,7 @@
                     <option value="">-- Select Party --</option>
                     {% for p in parties %}
                     <option value="{{ p.id }}" {% if p.id == inv.party_id %}selected{% endif %}>
-                        {{ p.name }}
+                        {{ p.name }}{% if p.addr %} - {{ p.addr }}{% endif %}
                     </option>
                     {% endfor %}
                 </select>
