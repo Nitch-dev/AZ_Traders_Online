@@ -116,23 +116,50 @@ def logout():
     return redirect(url_for("user.login"))
 
 
+def _resolve_adda_id(sb, form_data):
+    adda_id = (form_data.get("adda_id", "") or "").strip()
+    adda_name = (form_data.get("adda_name", "") or "").strip()
+    adda_number = (form_data.get("adda_number", "") or "").strip()
+
+    if adda_id:
+        try:
+            return int(adda_id)
+        except ValueError:
+            return None
+
+    if adda_name and adda_number:
+        existing = sb.table("addas").select("id").ilike("name", adda_name).eq("number", adda_number).limit(1).execute().data
+        if existing:
+            return existing[0]["id"]
+
+        try:
+            result = sb.table("addas").insert({"name": adda_name, "number": adda_number}).execute()
+            return result.data[0]["id"]
+        except Exception:
+            by_name = sb.table("addas").select("id").ilike("name", adda_name).limit(1).execute().data
+            if by_name:
+                return by_name[0]["id"]
+
+    return None
+
+
 def _update_pending_invoice_line_items(sb, inv_id, form_data):
     line_items = sb.table("invoice_items").select("id, item_id, quantity, discount").eq("invoice_id", inv_id).execute().data
 
     party_raw = form_data.get("party_id", "").strip()
-    adda_raw = form_data.get("adda_id", "").strip()
     invoice_date_raw = form_data.get("invoice_date", "").strip()
     delivery_paid_raw = form_data.get("delivery_paid", "yes").strip().lower()
     delivery_amount_raw = form_data.get("delivery_amount", "0").strip() or "0"
 
     try:
         party_id = int(party_raw)
-        adda_id = int(adda_raw)
     except ValueError:
-        return False, "Please select a valid party and adda."
+        return False, "Please select a valid party."
+
+    adda_id = _resolve_adda_id(sb, form_data)
 
     if party_id <= 0 or adda_id <= 0:
-        return False, "Please select a valid party and adda."
+        return False, "Please select an existing adda, or enter adda name and adda number."
 
     if not invoice_date_raw:
         return False, "Invoice date is required."
@@ -643,6 +670,33 @@ def admin_api_items_search():
 
         for r in results:
             r["total_stock"] = stock_map.get(r["id"], 0)
+
+    return jsonify(results)
+
+
+@admin_bp.route("/api/addas/search")
+@admin_required
+def admin_api_addas_search():
+    q = request.args.get("q", "").strip()
+    if len(q) < 1:
+        return jsonify([])
+
+    sb = get_supabase()
+    rows = sb.table("addas").select("name").ilike("name", f"%{q}%").order("name").limit(100).execute().data
+
+    seen = set()
+    results = []
+    for r in rows:
+        name = (r.get("name") or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append({"name": name})
+        if len(results) >= 15:
+            break
 
     return jsonify(results)
 
