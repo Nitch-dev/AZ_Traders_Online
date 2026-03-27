@@ -12,14 +12,15 @@
             <!-- Party -->
             <div class="mb-3">
                 <label class="form-label fw-bold">Party Name</label>
-                <select name="party_id" class="form-select" required>
-                    <option value="">-- Select Party --</option>
-                    {% for p in parties %}
-                    <option value="{{ p.id }}" {% if p.id == inv.party_id %}selected{% endif %}>
-                        {{ p.name }}{% if p.addr %} - {{ p.addr }}{% endif %}
-                    </option>
-                    {% endfor %}
-                </select>
+                <div class="position-relative">
+                    <input type="text" id="partySearch" class="form-control"
+                           placeholder="Type party name or address..." autocomplete="off" required>
+                    <div id="partyResults" class="autocomplete-dropdown"></div>
+                </div>
+                <input type="hidden" name="party_id" id="partyIdInput" value="{{ inv.party_id }}">
+                <div id="partyHint" class="text-muted mt-1" style="font-size:12px">
+                    Select a party from the list below.
+                </div>
             </div>
 
             <!-- ===== ADD ITEMS SECTION ===== -->
@@ -156,8 +157,12 @@ let selectedItem = null;
 let searchTimeout = null;
 let itemHighlightIdx = -1;
 let addaHighlightIdx = -1;
+let partyHighlightIdx = -1;
 let addaSearchTimeout = null;
 let selectedAdda = null;
+let selectedParty = null;
+const partiesData = {{ parties | tojson }};
+const initialPartyId = {{ inv.party_id | tojson }};
 
 const itemSearch = document.getElementById('itemSearch');
 const itemResults = document.getElementById('itemResults');
@@ -165,6 +170,10 @@ const qtyInput = document.getElementById('qtyInput');
 const itemsList = document.getElementById('itemsList');
 const noItemsMsg = document.getElementById('noItemsMsg');
 const itemsJsonInput = document.getElementById('itemsJson');
+const partySearch = document.getElementById('partySearch');
+const partyResults = document.getElementById('partyResults');
+const partyIdInput = document.getElementById('partyIdInput');
+const partyHint = document.getElementById('partyHint');
 const addaSearch = document.getElementById('addaSearch');
 const addaResults = document.getElementById('addaResults');
 const addaNumberInput = document.getElementById('addaNumberInput');
@@ -172,6 +181,115 @@ const addaIdInput = document.getElementById('addaIdInput');
 const addaNameInput = document.getElementById('addaNameInput');
 const addaHint = document.getElementById('addaHint');
 const addaPreview = document.getElementById('addaPreview');
+
+function renderPartyResults(filteredParties) {
+    if (filteredParties.length === 0) {
+        partyResults.innerHTML = '<div class="autocomplete-item text-muted">No parties found</div>';
+        partyResults.style.display = 'block';
+        return;
+    }
+
+    partyResults.innerHTML =
+        '<div class="party-dropdown-header">' +
+            '<span class="party-col">Party Name</span>' +
+            '<span class="party-col">Address</span>' +
+        '</div>' +
+        filteredParties.map(p =>
+            '<div class="autocomplete-item party-option" data-id="' + p.id +
+            '" data-name="' + escHtml(p.name || '') +
+            '" data-addr="' + escHtml(p.addr || '') + '">' +
+                '<span class="party-col">' + escHtml(p.name || '') + '</span>' +
+                '<span class="party-col text-muted">' + escHtml(p.addr || '-') + '</span>' +
+            '</div>'
+        ).join('');
+
+    partyResults.style.display = 'block';
+}
+
+function pickParty(id, name, addr) {
+    selectedParty = { id: id, name: name, addr: addr || '' };
+    partyIdInput.value = id;
+    partySearch.value = name || '';
+    partyHint.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> ' +
+        escHtml(name || '') + ' | ' + escHtml(addr || '-') + '</span>';
+    partyResults.style.display = 'none';
+    partyHighlightIdx = -1;
+}
+
+partySearch.addEventListener('input', function() {
+    const q = this.value.trim().toLowerCase();
+    partyHighlightIdx = -1;
+
+    if (!q) {
+        selectedParty = null;
+        partyIdInput.value = '';
+        partyHint.textContent = 'Select a party from the list below.';
+        partyResults.style.display = 'none';
+        return;
+    }
+
+    selectedParty = null;
+    partyIdInput.value = '';
+    partyHint.textContent = 'Select a party from the filtered list.';
+
+    const filtered = partiesData.filter(p => {
+        const n = (p.name || '').toLowerCase();
+        const a = (p.addr || '').toLowerCase();
+        return n.includes(q) || a.includes(q);
+    }).slice(0, 50);
+
+    renderPartyResults(filtered);
+});
+
+partySearch.addEventListener('focus', function() {
+    const q = this.value.trim().toLowerCase();
+    const filtered = partiesData.filter(p => {
+        if (!q) return true;
+        const n = (p.name || '').toLowerCase();
+        const a = (p.addr || '').toLowerCase();
+        return n.includes(q) || a.includes(q);
+    }).slice(0, 50);
+
+    renderPartyResults(filtered);
+});
+
+partyResults.addEventListener('click', function(e) {
+    const el = e.target.closest('.party-option');
+    if (!el || !el.dataset.id) return;
+    pickParty(el.dataset.id, el.dataset.name, el.dataset.addr);
+});
+
+partySearch.addEventListener('keydown', function(e) {
+    const items = partyResults.querySelectorAll('.party-option[data-id]');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (items.length > 0) {
+            partyHighlightIdx = Math.min(partyHighlightIdx + 1, items.length - 1);
+            updateHighlight(partyResults, partyHighlightIdx);
+        }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (items.length > 0) {
+            partyHighlightIdx = Math.max(partyHighlightIdx - 1, 0);
+            updateHighlight(partyResults, partyHighlightIdx);
+        }
+    } else if (e.key === 'Enter') {
+        if (partyResults.style.display === 'block' && partyHighlightIdx >= 0 && items[partyHighlightIdx]) {
+            e.preventDefault();
+            const el = items[partyHighlightIdx];
+            pickParty(el.dataset.id, el.dataset.name, el.dataset.addr);
+        }
+    } else if (e.key === 'Escape') {
+        partyResults.style.display = 'none';
+    }
+});
+
+if (initialPartyId) {
+    const initialParty = partiesData.find(p => String(p.id) === String(initialPartyId));
+    if (initialParty) {
+        pickParty(String(initialParty.id), initialParty.name || '', initialParty.addr || '');
+    }
+}
 
 function getCombinedAddaValue() {
     const name = addaSearch.value.trim();
@@ -464,11 +582,15 @@ document.addEventListener('click', function(e) {
     if (!e.target.closest('#itemSearch') && !e.target.closest('#itemResults')) {
         itemResults.style.display = 'none';
     }
+    if (!e.target.closest('#partySearch') && !e.target.closest('#partyResults')) {
+        partyResults.style.display = 'none';
+    }
     if (!e.target.closest('#addaSearch') && !e.target.closest('#addaResults')) {
         addaResults.style.display = 'none';
     }
 });
 itemResults.addEventListener('mousedown', function(e) { e.preventDefault(); });
+partyResults.addEventListener('mousedown', function(e) { e.preventDefault(); });
 addaResults.addEventListener('mousedown', function(e) { e.preventDefault(); });
 
 document.getElementById('deliveryPaid').addEventListener('change', function() {
@@ -485,6 +607,13 @@ document.getElementById('editForm').addEventListener('submit', function(e) {
         e.preventDefault();
         alert('Please add at least one item.');
         itemSearch.focus();
+        return;
+    }
+
+    if (!partyIdInput.value) {
+        e.preventDefault();
+        alert('Please select a party from the dropdown list.');
+        partySearch.focus();
         return;
     }
 

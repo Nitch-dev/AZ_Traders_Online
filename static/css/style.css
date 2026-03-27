@@ -121,6 +121,31 @@ html { scroll-behavior: smooth; }
     background: #e9ecef;
 }
 
+.party-dropdown-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 0.45rem 0.75rem;
+    font-size: 12px;
+    font-weight: 700;
+    color: #6c757d;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.party-option {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.party-col {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Added items list rows */
 .item-row {
     padding: 0.4rem 0.5rem;
