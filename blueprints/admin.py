@@ -1,8 +1,10 @@
 from functools import wraps
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
 from supabase_client import get_supabase
 import config
 from openpyxl import load_workbook
+from datetime import date
+import json
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin",
                      template_folder="../templates/admin")
@@ -115,8 +117,98 @@ def logout():
 
 
 def _update_pending_invoice_line_items(sb, inv_id, form_data):
-    line_items = sb.table("invoice_items").select("id, quantity, discount").eq("invoice_id", inv_id).execute().data
-    for li in line_items:
+    line_items = sb.table("invoice_items").select("id, item_id, quantity, discount").eq("invoice_id", inv_id).execute().data
+
+    party_raw = form_data.get("party_id", "").strip()
+    adda_raw = form_data.get("adda_id", "").strip()
+    invoice_date_raw = form_data.get("invoice_date", "").strip()
+    delivery_paid_raw = form_data.get("delivery_paid", "yes").strip().lower()
+    delivery_amount_raw = form_data.get("delivery_amount", "0").strip() or "0"
+
+    try:
+        party_id = int(party_raw)
+        adda_id = int(adda_raw)
+    except ValueError:
+        return False, "Please select a valid party and adda."
+
+    if party_id <= 0 or adda_id <= 0:
+        return False, "Please select a valid party and adda."
+
+    if not invoice_date_raw:
+        return False, "Invoice date is required."
+
+    try:
+        date.fromisoformat(invoice_date_raw)
+    except ValueError:
+        return False, "Invalid invoice date format."
+
+    delivery_paid = delivery_paid_raw == "yes"
+    try:
+        delivery_amount = float(delivery_amount_raw)
+    except ValueError:
+        return False, "Invalid delivery amount."
+
+    if delivery_amount < 0:
+        return False, "Delivery amount cannot be negative."
+
+    if delivery_paid:
+        delivery_amount = 0.0
+
+    delete_item_ids = set()
+    for raw_id in form_data.getlist("delete_item_ids"):
+        raw_id = (raw_id or "").strip()
+        if not raw_id:
+            continue
+        try:
+            delete_item_ids.add(int(raw_id))
+        except ValueError:
+            return False, "Invalid item delete request."
+
+    remaining_items = [li for li in line_items if int(li["id"]) not in delete_item_ids]
+
+    new_items_raw = form_data.get("new_items_json", "[]").strip() or "[]"
+    try:
+        new_items = json.loads(new_items_raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False, "Invalid new items payload."
+
+    if not isinstance(new_items, list):
+        return False, "Invalid new items payload."
+
+    sanitized_new_items = []
+    for entry in new_items:
+        if not isinstance(entry, dict):
+            return False, "Invalid new item entry."
+
+        item_raw = str(entry.get("item_id", "")).strip()
+        qty_raw = str(entry.get("quantity", "")).strip()
+        disc_raw = str(entry.get("discount", "0")).strip() or "0"
+
+        try:
+            item_id = int(item_raw)
+            quantity = int(qty_raw)
+        except ValueError:
+            return False, "New item must have valid item and quantity."
+
+        try:
+            line_discount = float(disc_raw)
+        except ValueError:
+            line_discount = 0.0
+
+        if item_id <= 0 or quantity <= 0:
+            return False, "New item must have valid item and quantity."
+
+        sanitized_new_items.append({
+            "item_id": item_id,
+            "quantity": quantity,
+            "discount": max(0.0, line_discount),
+        })
+
+    if not remaining_items and not sanitized_new_items:
+        return False, "Invoice must have at least one item."
+
+    updates = []
+    for li in remaining_items:
         qty_raw = form_data.get(f"item_quantity_{li['id']}", str(li.get("quantity", 0))).strip() or "0"
         disc_raw = form_data.get(f"item_discount_{li['id']}", str(li.get("discount", 0))).strip() or "0"
 
@@ -133,13 +225,48 @@ def _update_pending_invoice_line_items(sb, inv_id, form_data):
         if quantity <= 0:
             return False, "Quantity must be greater than 0 for every invoice item."
 
-        line_discount = max(0.0, line_discount)
-        sb.table("invoice_items").update({
+        updates.append({
+            "id": int(li["id"]),
             "quantity": quantity,
-            "discount": line_discount,
-        }).eq("id", li["id"]).execute()
+            "discount": max(0.0, line_discount),
+        })
 
-    return True, "Invoice line items updated."
+    sb.table("invoices").update({
+        "party_id": party_id,
+        "adda_id": adda_id,
+        "invoice_date": invoice_date_raw,
+        "delivery_paid": delivery_paid,
+        "delivery_amount": delivery_amount,
+    }).eq("id", inv_id).execute()
+
+    if delete_item_ids:
+        sb.table("invoice_items").delete().eq("invoice_id", inv_id).in_("id", list(delete_item_ids)).execute()
+
+    for upd in updates:
+        sb.table("invoice_items").update({
+            "quantity": upd["quantity"],
+            "discount": upd["discount"],
+        }).eq("id", upd["id"]).execute()
+
+    if sanitized_new_items:
+        sb.table("invoice_items").insert([
+            {
+                "invoice_id": inv_id,
+                "item_id": it["item_id"],
+                "quantity": it["quantity"],
+                "discount": it["discount"],
+            }
+            for it in sanitized_new_items
+        ]).execute()
+
+    deleted_count = len(delete_item_ids)
+    added_count = len(sanitized_new_items)
+    parts = ["Invoice updated."]
+    if deleted_count:
+        parts.append(f"{deleted_count} item(s) deleted.")
+    if added_count:
+        parts.append(f"{added_count} item(s) added.")
+    return True, " ".join(parts)
 
 
 # ---------- Dashboard ----------
@@ -323,40 +450,46 @@ def review_invoice(inv_id):
         flash("Invoice not found.", "danger")
         return redirect(url_for("admin.dashboard") + "#pending")
     inv = rows[0]
+    parties = sb.table("parties").select("id, name, addr").order("name").execute().data
+    addas = sb.table("addas").select("id, name, number").order("name").execute().data
     warehouses = sb.table("warehouses").select("*").order("name").execute().data
 
-    # Fetch per-warehouse stock for each item in the invoice
+    # Fetch per-warehouse stock for each item in the invoice table view,
+    # and build warehouse stock map for all items for client-side checks.
     item_ids = [li["item_id"] for li in inv.get("invoice_items", [])]
     item_stock_map = {}  # {item_id: [{warehouse_name, warehouse_id, stock}, ...]}
     # Also build {warehouse_id: {item_id: stock}} for JS validation
     wh_stock_json = {}  # {str(warehouse_id): {str(item_id): stock}}
-    if item_ids:
-        stock_rows = sb.table("warehouse_stock").select(
-            "item_id, warehouse_id, stock, warehouses(name)"
-        ).in_("item_id", item_ids).execute().data
-        for sr in stock_rows:
-            iid = sr["item_id"]
-            wid = sr["warehouse_id"]
-            wh_name = sr["warehouses"]["name"] if sr.get("warehouses") else "Unknown"
+    stock_rows = sb.table("warehouse_stock").select(
+        "item_id, warehouse_id, stock, warehouses(name)"
+    ).execute().data
+    item_id_set = set(item_ids)
+    for sr in stock_rows:
+        iid = sr["item_id"]
+        wid = sr["warehouse_id"]
+        wh_name = sr["warehouses"]["name"] if sr.get("warehouses") else "Unknown"
+
+        if iid in item_id_set:
             if iid not in item_stock_map:
                 item_stock_map[iid] = []
             item_stock_map[iid].append({"warehouse": wh_name, "warehouse_id": wid, "stock": sr["stock"]})
-            # Build JS-friendly dict
-            wid_s = str(wid)
-            if wid_s not in wh_stock_json:
-                wh_stock_json[wid_s] = {}
-            wh_stock_json[wid_s][str(iid)] = sr["stock"]
+
+        wid_s = str(wid)
+        if wid_s not in wh_stock_json:
+            wh_stock_json[wid_s] = {}
+        wh_stock_json[wid_s][str(iid)] = sr["stock"]
 
     # Build invoice items list for JS: [{item_id, item_code, name, quantity}, ...]
     inv_items_json = [
-        {"item_id": li["item_id"],
+        {"line_id": li["id"],
+         "item_id": li["item_id"],
          "item_code": li["items"]["item_code"] if li.get("items") else "?",
          "name": li["items"]["name"] if li.get("items") else "-",
          "quantity": li["quantity"]}
         for li in inv.get("invoice_items", [])
     ]
 
-    return render_template("review_invoice.html", inv=inv, warehouses=warehouses,
+    return render_template("review_invoice.html", inv=inv, parties=parties, addas=addas, warehouses=warehouses,
                            item_stock_map=item_stock_map,
                            wh_stock_json=wh_stock_json,
                            inv_items_json=inv_items_json)
@@ -374,12 +507,21 @@ def approve_invoice(inv_id):
 
     warehouse_id = int(warehouse_id)
 
-    # Fetch the pending invoice with line items
-    rows = sb.table("invoices").select("*").eq("id", inv_id).eq("status", "pending").execute().data
+    rows = sb.table("invoices").select("id").eq("id", inv_id).eq("status", "pending").execute().data
     if not rows:
         flash("Invoice not found or already processed.", "danger")
         return redirect(url_for("admin.dashboard") + "#pending")
 
+    ok, err = _update_pending_invoice_line_items(sb, inv_id, request.form)
+    if not ok:
+        flash(err, "danger")
+        return redirect(url_for("admin.review_invoice", inv_id=inv_id))
+
+    # Fetch updated pending invoice with line items
+    rows = sb.table("invoices").select("*").eq("id", inv_id).eq("status", "pending").execute().data
+    if not rows:
+        flash("Invoice not found or already processed.", "danger")
+        return redirect(url_for("admin.dashboard") + "#pending")
     inv = rows[0]
 
     # Copy header to approved_invoices (with warehouse)
@@ -394,11 +536,6 @@ def approve_invoice(inv_id):
         "invoice_date": inv["invoice_date"],
     }).execute()
     approved_id = approved_result.data[0]["id"]
-
-    ok, err = _update_pending_invoice_line_items(sb, inv_id, request.form)
-    if not ok:
-        flash(err, "danger")
-        return redirect(url_for("admin.review_invoice", inv_id=inv_id))
 
     # Copy line items to approved_invoice_items
     line_items = sb.table("invoice_items").select("*").eq("invoice_id", inv_id).execute().data
@@ -482,6 +619,32 @@ def delete_invoice(inv_id):
     get_supabase().table("invoices").delete().eq("id", inv_id).execute()
     flash("Invoice deleted.", "warning")
     return redirect(url_for("admin.dashboard") + "#pending")
+
+
+@admin_bp.route("/api/items/search")
+@admin_required
+def admin_api_items_search():
+    q = request.args.get("q", "").strip()
+    if len(q) < 1:
+        return jsonify([])
+
+    sb = get_supabase()
+    results = sb.table("items").select("id, item_code, name, discount").or_(
+        f"item_code.ilike.%{q}%,name.ilike.%{q}%"
+    ).limit(15).execute().data
+
+    if results:
+        item_ids = [r["id"] for r in results]
+        stock_rows = sb.table("warehouse_stock").select("item_id, stock").in_("item_id", item_ids).execute().data
+
+        stock_map = {}
+        for sr in stock_rows:
+            stock_map[sr["item_id"]] = stock_map.get(sr["item_id"], 0) + sr["stock"]
+
+        for r in results:
+            r["total_stock"] = stock_map.get(r["id"], 0)
+
+    return jsonify(results)
 
 
 # ========== STOCK MANAGEMENT ==========

@@ -9,36 +9,90 @@
     </div>
 
     <div class="card-body">
+        <form method="POST" action="{{ url_for('admin.approve_invoice', inv_id=inv.id) }}" id="approveForm">
         <!-- Invoice Info -->
         <div class="row mb-3 invoice-info">
             <div class="col-6">
-                <small class="text-muted d-block">Party</small>
-                <strong>{{ inv.parties.name if inv.parties else '-' }}</strong>
+                <label class="form-label fw-bold mb-1">Party</label>
+                <select class="form-select" name="party_id" required>
+                    <option value="">-- Select Party --</option>
+                    {% for p in parties %}
+                    <option value="{{ p.id }}" {% if p.id == inv.party_id %}selected{% endif %}>
+                        {{ p.name }}{% if p.addr %} - {{ p.addr }}{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-6 text-end">
-                <small class="text-muted d-block">Invoice Date</small>
-                <strong>{{ inv.invoice_date }}</strong>
+                <label class="form-label fw-bold mb-1">Invoice Date</label>
+                <input type="date" name="invoice_date" class="form-control" value="{{ inv.invoice_date }}" required>
             </div>
         </div>
 
         <div class="row mb-3 invoice-info">
             <div class="col-6">
-                <small class="text-muted d-block">Delivery Adda</small>
-                <strong>{% if inv.addas %}{{ inv.addas.name }}{% if inv.addas.number %} - {{ inv.addas.number }}{% endif %}{% else %}-{% endif %}</strong>
+                <label class="form-label fw-bold mb-1">Delivery Adda</label>
+                <select class="form-select" name="adda_id" required>
+                    <option value="">-- Select Adda --</option>
+                    {% for a in addas %}
+                    <option value="{{ a.id }}" {% if a.id == inv.adda_id %}selected{% endif %}>
+                        {{ a.name }}{% if a.number %} - {{ a.number }}{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-6 text-end">
-                <small class="text-muted d-block">Delivery</small>
-                {% if inv.delivery_paid %}
-                    <span class="badge bg-success">Paid</span>
-                {% else %}
-                    <strong class="text-danger">₹{{ inv.delivery_amount }}</strong>
-                {% endif %}
+                <label class="form-label fw-bold mb-1 d-block text-start text-md-end">Delivery</label>
+                <div class="d-flex justify-content-start justify-content-md-end gap-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="delivery_paid"
+                               id="deliveryPaid" value="yes" {% if inv.delivery_paid %}checked{% endif %}>
+                        <label class="form-check-label" for="deliveryPaid">Paid</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="delivery_paid"
+                               id="deliveryNotPaid" value="no" {% if not inv.delivery_paid %}checked{% endif %}>
+                        <label class="form-check-label" for="deliveryNotPaid">Not Paid</label>
+                    </div>
+                </div>
+                <div id="deliveryAmountGroup" class="mt-2" style="{% if inv.delivery_paid %}display:none;{% endif %}">
+                    <input type="number" step="0.01" min="0" name="delivery_amount" id="deliveryAmountInput"
+                           class="form-control" value="{{ inv.delivery_amount }}" placeholder="Delivery amount">
+                </div>
             </div>
         </div>
 
         <hr>
 
-        <form method="POST" action="{{ url_for('admin.approve_invoice', inv_id=inv.id) }}" id="approveForm">
+        <!-- Add New Items -->
+        <div class="card bg-light mb-3">
+            <div class="card-body pb-2">
+                <h6 class="fw-bold mb-2"><i class="bi bi-plus-circle"></i> Add New Item</h6>
+                <div class="row g-2 mb-2">
+                    <div class="col-12 col-md-6 position-relative">
+                        <input type="text" id="itemSearch" class="form-control"
+                               placeholder="Type item code or name..." autocomplete="off">
+                        <div id="itemResults" class="autocomplete-dropdown"></div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <input type="number" id="newQtyInput" class="form-control" min="1" step="1" placeholder="Qty" disabled>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="input-group">
+                            <input type="number" id="newDiscountInput" class="form-control" min="0" step="0.01" placeholder="Disc %" disabled>
+                            <button type="button" class="btn btn-success" id="addItemBtn" disabled title="Add item">
+                                <i class="bi bi-plus-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div id="itemStockHint" class="text-success fw-bold mb-1" style="font-size:12px; display:none;"></div>
+                <div id="newItemsList"></div>
+                <div id="noNewItemsMsg" class="text-muted" style="font-size:12px">No new items added.</div>
+                <input type="hidden" name="new_items_json" id="newItemsJson" value="[]">
+            </div>
+        </div>
+
         <!-- Items Table with Carton Calculation -->
         <h6 class="fw-bold mb-2"><i class="bi bi-list-check"></i> Items (Editable)</h6>
         <div class="table-responsive">
@@ -52,6 +106,7 @@
                         <th style="width:12%">Discount %</th>
                         <th style="width:18%">Cartons</th>
                         <th style="width:20%">Warehouse Stock</th>
+                        <th style="width:9%" class="text-center">Delete</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -73,6 +128,7 @@
                         <td>
                             <input type="number" class="form-control form-control-sm text-end js-qty"
                                    name="item_quantity_{{ li.id }}" min="1" step="1"
+                                   data-line-id="{{ li.id }}"
                                    data-item-id="{{ li.item_id }}"
                                    value="{{ li.quantity }}">
                         </td>
@@ -105,6 +161,11 @@
                                 <span class="text-muted" style="font-size:12px">No stock</span>
                             {% endif %}
                         </td>
+                        <td class="text-center">
+                            <input class="form-check-input js-delete-item" type="checkbox"
+                                   name="delete_item_ids" value="{{ li.id }}" data-line-id="{{ li.id }}"
+                                   title="Delete this item from invoice">
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -119,6 +180,7 @@
                                 <span class="badge bg-info text-dark">{{ total_loose.val }} pcs</span>
                             {% endif %}
                         </td>
+                        <td></td>
                         <td></td>
                     </tr>
                 </tfoot>
@@ -188,19 +250,265 @@ const warehouseSelect = document.getElementById('warehouseSelect');
 const stockCheckResult = document.getElementById('stockCheckResult');
 const approveBtn = document.getElementById('approveBtn');
 const qtyInputs = Array.from(document.querySelectorAll('.js-qty'));
+const deleteCheckboxes = Array.from(document.querySelectorAll('.js-delete-item'));
+const deliveryPaidInput = document.getElementById('deliveryPaid');
+const deliveryNotPaidInput = document.getElementById('deliveryNotPaid');
+const deliveryAmountGroup = document.getElementById('deliveryAmountGroup');
+const deliveryAmountInput = document.getElementById('deliveryAmountInput');
+const itemSearch = document.getElementById('itemSearch');
+const itemResults = document.getElementById('itemResults');
+const newQtyInput = document.getElementById('newQtyInput');
+const newDiscountInput = document.getElementById('newDiscountInput');
+const addItemBtn = document.getElementById('addItemBtn');
+const itemStockHint = document.getElementById('itemStockHint');
+const newItemsList = document.getElementById('newItemsList');
+const noNewItemsMsg = document.getElementById('noNewItemsMsg');
+const newItemsJson = document.getElementById('newItemsJson');
+
+let newItems = [];
+let selectedItem = null;
+let itemHighlightIdx = -1;
+let itemSearchTimeout = null;
+
+function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str == null ? '' : String(str);
+    return d.innerHTML;
+}
 
 function getCurrentInvoiceItems() {
-    return invItems.map(function(item) {
-        const qtyInput = document.querySelector('.js-qty[data-item-id="' + item.item_id + '"]');
+    const byItem = {};
+
+    invItems.forEach(function(item) {
+        const qtyInput = document.querySelector('.js-qty[data-line-id="' + item.line_id + '"]');
+        const delInput = document.querySelector('.js-delete-item[data-line-id="' + item.line_id + '"]');
+        const isDeleted = delInput ? delInput.checked : false;
+        if (isDeleted) {
+            return;
+        }
+
         const quantity = qtyInput ? Math.max(0, parseInt(qtyInput.value || '0', 10)) : item.quantity;
-        return {
-            item_id: item.item_id,
-            item_code: item.item_code,
-            name: item.name,
-            quantity: quantity,
-        };
+        if (!byItem[item.item_id]) {
+            byItem[item.item_id] = {
+                item_id: item.item_id,
+                item_code: item.item_code,
+                name: item.name,
+                quantity: 0,
+            };
+        }
+        byItem[item.item_id].quantity += quantity;
+    });
+
+    newItems.forEach(function(item) {
+        if (!byItem[item.item_id]) {
+            byItem[item.item_id] = {
+                item_id: item.item_id,
+                item_code: item.item_code,
+                name: item.name,
+                quantity: 0,
+            };
+        }
+        byItem[item.item_id].quantity += item.quantity;
+    });
+
+    return Object.keys(byItem).map(function(key) {
+        return byItem[key];
     });
 }
+
+function renderNewItems() {
+    if (newItems.length === 0) {
+        newItemsList.innerHTML = '';
+        noNewItemsMsg.style.display = 'block';
+    } else {
+        noNewItemsMsg.style.display = 'none';
+        newItemsList.innerHTML = newItems.map(function(it, idx) {
+            return '<div class="item-row d-flex justify-content-between align-items-center">' +
+                '<div><strong>' + escHtml(it.item_code) + '</strong> - ' + escHtml(it.name) +
+                ' <span class="badge bg-secondary">x' + it.quantity + '</span>' +
+                ' <span class="badge bg-info text-dark">Disc: ' + it.discount + '%</span></div>' +
+                '<button type="button" class="btn btn-sm btn-outline-danger" onclick="removeNewItem(' + idx + ')">' +
+                '<i class="bi bi-x"></i></button></div>';
+        }).join('');
+    }
+
+    newItemsJson.value = JSON.stringify(newItems.map(function(it) {
+        return { item_id: it.item_id, quantity: it.quantity, discount: it.discount };
+    }));
+
+    runStockCheck();
+}
+
+window.removeNewItem = function(idx) {
+    newItems.splice(idx, 1);
+    renderNewItems();
+};
+
+function updateHighlight(container, idx) {
+    const items = container.querySelectorAll('.autocomplete-item[data-id]');
+    items.forEach(function(el, i) {
+        if (i === idx) {
+            el.classList.add('autocomplete-active');
+        } else {
+            el.classList.remove('autocomplete-active');
+        }
+    });
+    if (items[idx]) {
+        items[idx].scrollIntoView({ block: 'nearest' });
+    }
+}
+
+function pickItem(item) {
+    selectedItem = item;
+    itemSearch.value = item.item_code + ' - ' + item.name;
+    newQtyInput.disabled = false;
+    newDiscountInput.disabled = false;
+    newQtyInput.value = '1';
+    newDiscountInput.value = String(item.discount || 0);
+    addItemBtn.disabled = false;
+    itemResults.style.display = 'none';
+    itemHighlightIdx = -1;
+
+    itemStockHint.textContent = 'Total stock: ' + (item.total_stock || 0);
+    itemStockHint.style.display = 'block';
+    newQtyInput.focus();
+    newQtyInput.select();
+}
+
+itemSearch.addEventListener('input', function() {
+    const q = this.value.trim();
+    clearTimeout(itemSearchTimeout);
+    selectedItem = null;
+    newQtyInput.disabled = true;
+    newDiscountInput.disabled = true;
+    addItemBtn.disabled = true;
+    itemStockHint.style.display = 'none';
+    itemHighlightIdx = -1;
+
+    if (q.length < 1) {
+        itemResults.style.display = 'none';
+        itemResults.innerHTML = '';
+        return;
+    }
+
+    itemSearchTimeout = setTimeout(function() {
+        fetch('{{ url_for("admin.admin_api_items_search") }}?q=' + encodeURIComponent(q))
+            .then(function(r) { return r.json(); })
+            .then(function(items) {
+                if (!items || items.length === 0) {
+                    itemResults.innerHTML = '<div class="autocomplete-item text-muted">No items found</div>';
+                    itemResults.style.display = 'block';
+                    return;
+                }
+
+                itemResults.innerHTML = items.map(function(i) {
+                    return '<div class="autocomplete-item" data-id="' + i.id +
+                        '" data-code="' + escHtml(i.item_code) +
+                        '" data-name="' + escHtml(i.name) +
+                        '" data-discount="' + (i.discount || 0) +
+                        '" data-stock="' + (i.total_stock || 0) + '">' +
+                        '<strong>' + escHtml(i.item_code) + '</strong> - ' + escHtml(i.name) +
+                        ' <span class="badge ' + ((i.total_stock || 0) > 0 ? 'bg-success' : 'bg-danger') +
+                        '" style="font-size:11px">Stock: ' + (i.total_stock || 0) + '</span></div>';
+                }).join('');
+                itemResults.style.display = 'block';
+            });
+    }, 200);
+});
+
+itemResults.addEventListener('click', function(e) {
+    const el = e.target.closest('.autocomplete-item[data-id]');
+    if (!el) return;
+    pickItem({
+        id: parseInt(el.dataset.id, 10),
+        item_code: el.dataset.code,
+        name: el.dataset.name,
+        discount: parseFloat(el.dataset.discount || '0'),
+        total_stock: parseInt(el.dataset.stock || '0', 10),
+    });
+});
+
+itemSearch.addEventListener('keydown', function(e) {
+    const items = itemResults.querySelectorAll('.autocomplete-item[data-id]');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (items.length > 0) {
+            itemHighlightIdx = Math.min(itemHighlightIdx + 1, items.length - 1);
+            updateHighlight(itemResults, itemHighlightIdx);
+        }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (items.length > 0) {
+            itemHighlightIdx = Math.max(itemHighlightIdx - 1, 0);
+            updateHighlight(itemResults, itemHighlightIdx);
+        }
+    } else if (e.key === 'Enter') {
+        if (itemResults.style.display === 'block' && itemHighlightIdx >= 0 && items[itemHighlightIdx]) {
+            e.preventDefault();
+            const el = items[itemHighlightIdx];
+            pickItem({
+                id: parseInt(el.dataset.id, 10),
+                item_code: el.dataset.code,
+                name: el.dataset.name,
+                discount: parseFloat(el.dataset.discount || '0'),
+                total_stock: parseInt(el.dataset.stock || '0', 10),
+            });
+        }
+    } else if (e.key === 'Escape') {
+        itemResults.style.display = 'none';
+    }
+});
+
+function addSelectedItem() {
+    if (!selectedItem) return;
+
+    const qty = parseInt(newQtyInput.value || '0', 10);
+    const discount = parseFloat(newDiscountInput.value || '0');
+    if (!Number.isFinite(qty) || qty <= 0) {
+        alert('Please enter a valid quantity.');
+        newQtyInput.focus();
+        return;
+    }
+
+    if (!Number.isFinite(discount) || discount < 0) {
+        alert('Please enter a valid discount.');
+        newDiscountInput.focus();
+        return;
+    }
+
+    newItems.push({
+        item_id: selectedItem.id,
+        item_code: selectedItem.item_code,
+        name: selectedItem.name,
+        quantity: qty,
+        discount: discount,
+    });
+
+    selectedItem = null;
+    itemSearch.value = '';
+    newQtyInput.value = '';
+    newDiscountInput.value = '';
+    newQtyInput.disabled = true;
+    newDiscountInput.disabled = true;
+    addItemBtn.disabled = true;
+    itemStockHint.style.display = 'none';
+    itemResults.style.display = 'none';
+    renderNewItems();
+}
+
+addItemBtn.addEventListener('click', addSelectedItem);
+newQtyInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        addSelectedItem();
+    }
+});
+newDiscountInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        addSelectedItem();
+    }
+});
 
 function runStockCheck() {
     const wid = warehouseSelect.value;
@@ -214,10 +522,17 @@ function runStockCheck() {
     const whData = whStock[wid] || {};
     let allOk = true;
     let hasInvalidQty = false;
+    let hasNoItems = false;
     let html = '<div class="small">';
     html += '<strong>Stock check for selected warehouse:</strong>';
     html += '<table class="table table-sm table-bordered mt-1 mb-0" style="font-size:12px">';
     html += '<thead class="table-light"><tr><th>Item</th><th class="text-end">Need</th><th class="text-end">Have</th><th>Status</th></tr></thead><tbody>';
+
+    if (currentItems.length === 0) {
+        hasNoItems = true;
+        allOk = false;
+        html += '<tr><td colspan="4" class="text-center text-danger">No items left. Uncheck at least one delete option.</td></tr>';
+    }
 
     currentItems.forEach(function(item) {
         const available = whData[String(item.item_id)] || 0;
@@ -226,7 +541,7 @@ function runStockCheck() {
         if (!ok) allOk = false;
         if (!qtyValid) hasInvalidQty = true;
         html += '<tr>';
-        html += '<td><code>' + item.item_code + '</code> ' + item.name + '</td>';
+        html += '<td><code>' + escHtml(item.item_code) + '</code> ' + escHtml(item.name) + '</td>';
         html += '<td class="text-end">' + item.quantity + '</td>';
         html += '<td class="text-end">' + available + '</td>';
         html += '<td>' + (qtyValid
@@ -239,7 +554,9 @@ function runStockCheck() {
 
     html += '</tbody></table></div>';
 
-    if (hasInvalidQty) {
+    if (hasNoItems) {
+        html += '<div class="alert alert-danger py-1 mt-2 mb-0" style="font-size:13px"><i class="bi bi-exclamation-octagon"></i> Invoice must have at least one item.</div>';
+    } else if (hasInvalidQty) {
         html += '<div class="alert alert-danger py-1 mt-2 mb-0" style="font-size:13px"><i class="bi bi-exclamation-octagon"></i> Quantity must be greater than 0 for all items before approval.</div>';
     } else if (!allOk) {
         html += '<div class="alert alert-warning py-1 mt-2 mb-0" style="font-size:13px"><i class="bi bi-exclamation-triangle"></i> Warning: Some items have insufficient stock. Stock will go negative for those items.</div>';
@@ -249,7 +566,7 @@ function runStockCheck() {
 
     stockCheckResult.innerHTML = html;
     stockCheckResult.style.display = 'block';
-    approveBtn.disabled = hasInvalidQty;
+    approveBtn.disabled = hasInvalidQty || hasNoItems;
 }
 
 warehouseSelect.addEventListener('change', function() {
@@ -258,6 +575,40 @@ warehouseSelect.addEventListener('change', function() {
 
 qtyInputs.forEach(function(input) {
     input.addEventListener('input', runStockCheck);
+});
+
+deleteCheckboxes.forEach(function(cb) {
+    cb.addEventListener('change', runStockCheck);
+});
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#itemSearch') && !e.target.closest('#itemResults')) {
+        itemResults.style.display = 'none';
+    }
+});
+
+itemResults.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+});
+
+deliveryPaidInput.addEventListener('change', function() {
+    deliveryAmountGroup.style.display = 'none';
+    if (deliveryAmountInput) {
+        deliveryAmountInput.value = '0';
+    }
+});
+
+deliveryNotPaidInput.addEventListener('change', function() {
+    deliveryAmountGroup.style.display = 'block';
+    if (deliveryAmountInput) {
+        deliveryAmountInput.focus();
+    }
+});
+
+document.getElementById('approveForm').addEventListener('submit', function() {
+    newItemsJson.value = JSON.stringify(newItems.map(function(it) {
+        return { item_id: it.item_id, quantity: it.quantity, discount: it.discount };
+    }));
 });
 </script>
 {% endblock %}
