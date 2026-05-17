@@ -231,9 +231,20 @@ def change_password():
 
 
 def _generate_invoice_number(sb):
-    """Generate next invoice number like INV-00001 based on count."""
-    result = sb.table("invoices").select("id", count="exact").execute()
-    next_num = (result.count or 0) + 1
+    """Generate next invoice number like INV-00001 based on highest existing number."""
+    invoices = sb.table("invoices").select("invoice_number").order("invoice_number", desc=True).limit(1).execute().data
+    
+    if invoices and invoices[0].get("invoice_number"):
+        last_num_str = invoices[0]["invoice_number"]
+        try:
+            # Extract numeric part (e.g., "INV-00005" -> 5)
+            last_num = int(last_num_str.split("-")[-1])
+            next_num = last_num + 1
+        except (ValueError, IndexError):
+            next_num = 1
+    else:
+        next_num = 1
+    
     return f"INV-{next_num:05d}"
 
 
