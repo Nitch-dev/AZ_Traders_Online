@@ -61,6 +61,7 @@ def approved_invoices():
                 "adda_name": adda_name,
                 "adda_number": adda_number,
                 "warehouse": inv["warehouses"]["id"] if inv.get("warehouses") else inv.get("warehouse_id"),
+                "so": inv.get("so", ""),
                 "delivery_paid": inv["delivery_paid"],
                 "delivery_amount": float(inv["delivery_amount"]),
                 "invoice_date": inv["invoice_date"],

@@ -534,6 +534,11 @@ def approve_invoice(inv_id):
 
     warehouse_id = int(warehouse_id)
 
+    so = (request.form.get("so") or "").strip()
+    if not so:
+        flash("Please select an SO zone.", "danger")
+        return redirect(url_for("admin.review_invoice", inv_id=inv_id))
+
     rows = sb.table("invoices").select("id").eq("id", inv_id).eq("status", "pending").execute().data
     if not rows:
         flash("Invoice not found or already processed.", "danger")
@@ -558,6 +563,7 @@ def approve_invoice(inv_id):
         "party_id": inv["party_id"],
         "adda_id": inv["adda_id"],
         "warehouse_id": warehouse_id,
+        "so": so,
         "delivery_paid": inv["delivery_paid"],
         "delivery_amount": inv["delivery_amount"],
         "invoice_date": inv["invoice_date"],

@@ -80,6 +80,7 @@ CREATE TABLE approved_invoices (
     party_id BIGINT NOT NULL REFERENCES parties(id) ON DELETE CASCADE,
     adda_id BIGINT NOT NULL REFERENCES addas(id) ON DELETE CASCADE,
     warehouse_id BIGINT REFERENCES warehouses(id) ON DELETE SET NULL,
+    so TEXT NOT NULL DEFAULT '',
     delivery_paid BOOLEAN NOT NULL DEFAULT false,
     delivery_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
     invoice_date DATE NOT NULL,
