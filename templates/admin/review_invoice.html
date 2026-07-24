@@ -778,4 +778,10 @@ document.getElementById('approveForm').addEventListener('submit', function(e) {
     }
 
     newItemsJson.value = JSON.stringify(newItems.map(function(it) {
-            return { item_id: it.item_id, quantity: it.quantity };
+        return { item_id: it.item_id, quantity: it.quantity };
+    }));
+});
+
+updateAddaPreview();
+</script>
+{% endblock %}
