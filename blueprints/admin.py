@@ -209,7 +209,6 @@ def _update_pending_invoice_line_items(sb, inv_id, form_data):
 
         item_raw = str(entry.get("item_id", "")).strip()
         qty_raw = str(entry.get("quantity", "")).strip()
-        disc_raw = str(entry.get("discount", "0")).strip() or "0"
 
         try:
             item_id = int(item_raw)
@@ -217,18 +216,12 @@ def _update_pending_invoice_line_items(sb, inv_id, form_data):
         except ValueError:
             return False, "New item must have valid item and quantity."
 
-        try:
-            line_discount = float(disc_raw)
-        except ValueError:
-            line_discount = 0.0
-
         if item_id <= 0 or quantity <= 0:
             return False, "New item must have valid item and quantity."
 
         sanitized_new_items.append({
             "item_id": item_id,
             "quantity": quantity,
-            "discount": max(0.0, line_discount),
         })
 
     if not remaining_items and not sanitized_new_items:
@@ -237,17 +230,10 @@ def _update_pending_invoice_line_items(sb, inv_id, form_data):
     updates = []
     for li in remaining_items:
         qty_raw = form_data.get(f"item_quantity_{li['id']}", str(li.get("quantity", 0))).strip() or "0"
-        disc_raw = form_data.get(f"item_discount_{li['id']}", str(li.get("discount", 0))).strip() or "0"
-
         try:
             quantity = int(qty_raw)
         except ValueError:
             return False, "Invalid quantity value provided."
-
-        try:
-            line_discount = float(disc_raw)
-        except ValueError:
-            line_discount = 0.0
 
         if quantity <= 0:
             return False, "Quantity must be greater than 0 for every invoice item."
@@ -255,7 +241,6 @@ def _update_pending_invoice_line_items(sb, inv_id, form_data):
         updates.append({
             "id": int(li["id"]),
             "quantity": quantity,
-            "discount": max(0.0, line_discount),
         })
 
     sb.table("invoices").update({
@@ -534,6 +519,17 @@ def approve_invoice(inv_id):
 
     warehouse_id = int(warehouse_id)
 
+    invoice_discount_raw = (request.form.get("invoice_discount", "0") or "0").strip()
+    try:
+        invoice_discount = float(invoice_discount_raw)
+    except ValueError:
+        flash("Invalid invoice discount.", "danger")
+        return redirect(url_for("admin.review_invoice", inv_id=inv_id))
+
+    if invoice_discount < 0:
+        flash("Invoice discount cannot be negative.", "danger")
+        return redirect(url_for("admin.review_invoice", inv_id=inv_id))
+
     so = (request.form.get("so") or "").strip()
     if not so:
         flash("Please select an SO zone.", "danger")
@@ -570,7 +566,7 @@ def approve_invoice(inv_id):
     }).execute()
     approved_id = approved_result.data[0]["id"]
 
-    # Copy line items to approved_invoice_items
+    # Copy line items to approved_invoice_items using invoice-level discount
     line_items = sb.table("invoice_items").select("*").eq("invoice_id", inv_id).execute().data
     if line_items:
         approved_lines = [
@@ -578,7 +574,7 @@ def approve_invoice(inv_id):
                 "approved_invoice_id": approved_id,
                 "item_id": li["item_id"],
                 "quantity": li["quantity"],
-                "discount": li.get("discount", 0),
+                "discount": invoice_discount,
             }
             for li in line_items
         ]

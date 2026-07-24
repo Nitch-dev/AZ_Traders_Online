@@ -87,12 +87,9 @@
                         <input type="number" id="newQtyInput" class="form-control" min="1" step="1" placeholder="Qty" disabled>
                     </div>
                     <div class="col-6 col-md-3">
-                        <div class="input-group">
-                            <input type="number" id="newDiscountInput" class="form-control" min="0" step="0.01" placeholder="Disc %" disabled>
-                            <button type="button" class="btn btn-success" id="addItemBtn" disabled title="Add item">
-                                <i class="bi bi-plus-lg"></i>
-                            </button>
-                        </div>
+                        <button type="button" class="btn btn-success w-100" id="addItemBtn" disabled title="Add item">
+                            <i class="bi bi-plus-lg"></i> Add item
+                        </button>
                     </div>
                 </div>
                 <div id="itemStockHint" class="text-success fw-bold mb-1" style="font-size:12px; display:none;"></div>
@@ -112,7 +109,6 @@
                         <th style="width:18%">Code</th>
                         <th>Item Name</th>
                         <th style="width:12%" class="text-end">Qty</th>
-                        <th style="width:12%">Discount %</th>
                         <th style="width:18%">Cartons</th>
                         <th style="width:20%">Warehouse Stock</th>
                         <th style="width:9%" class="text-center">Delete</th>
@@ -140,11 +136,6 @@
                                    data-line-id="{{ li.id }}"
                                    data-item-id="{{ li.item_id }}"
                                    value="{{ li.quantity }}">
-                        </td>
-                        <td>
-                            <input type="number" class="form-control form-control-sm"
-                                   name="item_discount_{{ li.id }}" min="0" step="0.01"
-                                   value="{{ li.discount if li.discount is not none else 0 }}">
                         </td>
                         <td>
                             <span class="badge bg-primary">{{ cartons }} ctn</span>
@@ -229,6 +220,12 @@
                     </select>
                 </div>
 
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Invoice Discount (%)</label>
+                    <input type="number" name="invoice_discount" class="form-control" min="0" step="0.01" value="0">
+                    <div class="form-text">Apply this discount percentage to the total invoice at approval time.</div>
+                </div>
+
                 <!-- Stock check results shown here -->
                 <div id="stockCheckResult" class="mb-3" style="display:none;"></div>
 
@@ -289,7 +286,6 @@ const addaPreview = document.getElementById('addaPreview');
 const itemSearch = document.getElementById('itemSearch');
 const itemResults = document.getElementById('itemResults');
 const newQtyInput = document.getElementById('newQtyInput');
-const newDiscountInput = document.getElementById('newDiscountInput');
 const addItemBtn = document.getElementById('addItemBtn');
 const itemStockHint = document.getElementById('itemStockHint');
 const newItemsList = document.getElementById('newItemsList');
@@ -399,17 +395,14 @@ function renderNewItems() {
         newItemsList.innerHTML = newItems.map(function(it, idx) {
             return '<div class="item-row d-flex justify-content-between align-items-center">' +
                 '<div><strong>' + escHtml(it.item_code) + '</strong> - ' + escHtml(it.name) +
-                ' <span class="badge bg-secondary">x' + it.quantity + '</span>' +
-                ' <span class="badge bg-info text-dark">Disc: ' + it.discount + '%</span></div>' +
+                ' <span class="badge bg-secondary">x' + it.quantity + '</span></div>' +
                 '<button type="button" class="btn btn-danger btn-sm" onclick="removeNewItem(' + idx + ')">Remove</button></div>';
         }).join('');
     }
 
     newItemsJson.value = JSON.stringify(newItems.map(function(it) {
-        return { item_id: it.item_id, quantity: it.quantity, discount: it.discount };
+        return { item_id: it.item_id, quantity: it.quantity };
     }));
-
-    runStockCheck();
 }
 
 window.removeNewItem = function(idx) {
@@ -435,9 +428,7 @@ function pickItem(item) {
     selectedItem = item;
     itemSearch.value = item.item_code + ' - ' + item.name;
     newQtyInput.disabled = false;
-    newDiscountInput.disabled = false;
     newQtyInput.value = '1';
-    newDiscountInput.value = String(item.discount || 0);
     addItemBtn.disabled = false;
     itemResults.style.display = 'none';
     itemHighlightIdx = -1;
@@ -453,7 +444,6 @@ itemSearch.addEventListener('input', function() {
     clearTimeout(itemSearchTimeout);
     selectedItem = null;
     newQtyInput.disabled = true;
-    newDiscountInput.disabled = true;
     addItemBtn.disabled = true;
     itemStockHint.style.display = 'none';
     itemHighlightIdx = -1;
@@ -478,7 +468,6 @@ itemSearch.addEventListener('input', function() {
                     return '<div class="autocomplete-item" data-id="' + i.id +
                         '" data-code="' + escHtml(i.item_code) +
                         '" data-name="' + escHtml(i.name) +
-                        '" data-discount="' + (i.discount || 0) +
                         '" data-stock="' + (i.total_stock || 0) + '">' +
                         '<strong>' + escHtml(i.item_code) + '</strong> - ' + escHtml(i.name) +
                         ' <span class="badge ' + ((i.total_stock || 0) > 0 ? 'bg-success' : 'bg-danger') +
@@ -583,7 +572,6 @@ itemResults.addEventListener('click', function(e) {
         id: parseInt(el.dataset.id, 10),
         item_code: el.dataset.code,
         name: el.dataset.name,
-        discount: parseFloat(el.dataset.discount || '0'),
         total_stock: parseInt(el.dataset.stock || '0', 10),
     });
 });
@@ -610,7 +598,6 @@ itemSearch.addEventListener('keydown', function(e) {
                 id: parseInt(el.dataset.id, 10),
                 item_code: el.dataset.code,
                 name: el.dataset.name,
-                discount: parseFloat(el.dataset.discount || '0'),
                 total_stock: parseInt(el.dataset.stock || '0', 10),
             });
         }
@@ -623,16 +610,9 @@ function addSelectedItem() {
     if (!selectedItem) return;
 
     const qty = parseInt(newQtyInput.value || '0', 10);
-    const discount = parseFloat(newDiscountInput.value || '0');
     if (!Number.isFinite(qty) || qty <= 0) {
         alert('Please enter a valid quantity.');
         newQtyInput.focus();
-        return;
-    }
-
-    if (!Number.isFinite(discount) || discount < 0) {
-        alert('Please enter a valid discount.');
-        newDiscountInput.focus();
         return;
     }
 
@@ -641,15 +621,12 @@ function addSelectedItem() {
         item_code: selectedItem.item_code,
         name: selectedItem.name,
         quantity: qty,
-        discount: discount,
     });
 
     selectedItem = null;
     itemSearch.value = '';
     newQtyInput.value = '';
-    newDiscountInput.value = '';
     newQtyInput.disabled = true;
-    newDiscountInput.disabled = true;
     addItemBtn.disabled = true;
     itemStockHint.style.display = 'none';
     itemResults.style.display = 'none';
@@ -663,12 +640,7 @@ newQtyInput.addEventListener('keydown', function(e) {
         addSelectedItem();
     }
 });
-newDiscountInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-        e.preventDefault();
-        addSelectedItem();
-    }
-});
+
 
 function runStockCheck() {
     const wid = warehouseSelect.value;
@@ -806,10 +778,4 @@ document.getElementById('approveForm').addEventListener('submit', function(e) {
     }
 
     newItemsJson.value = JSON.stringify(newItems.map(function(it) {
-        return { item_id: it.item_id, quantity: it.quantity, discount: it.discount };
-    }));
-});
-
-updateAddaPreview();
-</script>
-{% endblock %}
+            return { item_id: it.item_id, quantity: it.quantity };
