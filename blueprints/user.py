@@ -437,10 +437,7 @@ def add_invoice():
         flash("Invoice date must be within the last 3 days.", "danger")
         return redirect(url_for("user.home"))
 
-    item_ids = [int(entry["item_id"]) for entry in items_list]
-    item_discount_map = _get_item_discount_map(sb, item_ids)
-
-    # Generate invoice number
+        # Generate invoice number
     inv_number = _generate_invoice_number(sb)
 
     # Create invoice header
@@ -456,13 +453,13 @@ def add_invoice():
 
     invoice_id = inv_result.data[0]["id"]
 
-    # Insert line items
+    # Insert line items with zero discount at creation
     line_items = [
         {
             "invoice_id": invoice_id,
             "item_id": int(entry["item_id"]),
             "quantity": int(entry["quantity"]),
-            "discount": item_discount_map.get(int(entry["item_id"]), 0.0),
+            "discount": 0.0,
         }
         for entry in items_list
     ]
@@ -552,9 +549,6 @@ def edit_invoice(inv_id):
         flash("Invoice date must be within the last 3 days.", "danger")
         return redirect(url_for("user.edit_invoice", inv_id=inv_id))
 
-    item_ids = [int(entry["item_id"]) for entry in items_list]
-    item_discount_map = _get_item_discount_map(sb, item_ids)
-
     # Update invoice header
     sb.table("invoices").update({
         "party_id": int(party_id),
@@ -564,14 +558,14 @@ def edit_invoice(inv_id):
         "invoice_date": invoice_date,
     }).eq("id", inv_id).execute()
 
-    # Delete old line items and re-insert
+    # Delete old line items and re-insert with zero discount
     sb.table("invoice_items").delete().eq("invoice_id", inv_id).execute()
     line_items = [
         {
             "invoice_id": inv_id,
             "item_id": int(entry["item_id"]),
             "quantity": int(entry["quantity"]),
-            "discount": item_discount_map.get(int(entry["item_id"]), 0.0),
+            "discount": 0.0,
         }
         for entry in items_list
     ]

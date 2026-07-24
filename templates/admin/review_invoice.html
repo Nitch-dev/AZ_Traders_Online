@@ -144,7 +144,7 @@
                         <td>
                             <input type="number" class="form-control form-control-sm"
                                    name="item_discount_{{ li.id }}" min="0" step="0.01"
-                                   value="{{ li.discount if li.discount is not none else (item['discount'] if item and item['discount'] is not none else 0) }}">
+                                   value="{{ li.discount if li.discount is not none else 0 }}">
                         </td>
                         <td>
                             <span class="badge bg-primary">{{ cartons }} ctn</span>
