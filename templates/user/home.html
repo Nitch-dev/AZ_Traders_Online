@@ -438,8 +438,8 @@ function pickItem(id, code, name, stock) {
     qtyInput.disabled = false;
     document.getElementById('addItemBtn').disabled = false;
     qtyInput.value = '';
-    qtyInput.max = available;
-    document.getElementById('stockHint').textContent = 'Available stock: ' + available + ' (Total: ' + totalStock + ')';
+    qtyInput.removeAttribute('max');
+    document.getElementById('stockHint').textContent = 'Stock: ' + totalStock;
     document.getElementById('stockHint').style.display = 'block';
     qtyInput.focus();
 }
@@ -447,10 +447,6 @@ function pickItem(id, code, name, stock) {
 function doAddItem() {
     const qty = parseInt(qtyInput.value);
     if (!selectedItem || !qty || qty < 1) return;
-    if (qty > selectedItem.available) {
-        alert('Not enough stock! Available: ' + selectedItem.available);
-        return;
-    }
     addedItems.push({
         item_id: selectedItem.item_id,
         item_code: selectedItem.item_code,
