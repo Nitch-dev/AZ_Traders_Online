@@ -203,21 +203,37 @@
     <div class="collapse" id="partyForm">
         <div class="card-body">
             <form method="POST" action="{{ url_for('admin.add_party') }}">
-                <div class="input-group">
-                    <input type="text" name="name" class="form-control" placeholder="Party name" required>
-                    <button class="btn btn-primary">Add</button>
+                <div class="row g-2">
+                    <div class="col-md-8">
+                        <input type="text" name="name" class="form-control" placeholder="Party name" required>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="number" name="discount" class="form-control" placeholder="Disc %" min="0" step="0.01" value="0">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary w-100">Add</button>
+                    </div>
                 </div>
             </form>
         </div>
     </div>
     <div class="table-responsive">
         <table class="table table-sm table-striped mb-0">
-            <thead><tr><th>#</th><th>Name</th><th></th></tr></thead>
+            <thead><tr><th>#</th><th>Name</th><th>Party Discount %</th><th></th></tr></thead>
             <tbody>
                 {% for p in parties %}
                 <tr>
                     <td>{{ loop.index }}</td>
                     <td>{{ p.name }}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('admin.update_party', pid=p.id) }}" class="d-flex gap-1">
+                            <input type="number" name="discount" class="form-control form-control-sm"
+                                   value="{{ p.discount if p.discount is not none else 0 }}" min="0" step="0.01" style="max-width:110px">
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-check"></i>
+                            </button>
+                        </form>
+                    </td>
                     <td>
                         <a href="{{ url_for('admin.delete_party', pid=p.id) }}"
                            class="btn btn-sm btn-outline-danger"

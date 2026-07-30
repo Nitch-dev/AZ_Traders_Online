@@ -15,7 +15,8 @@
 -- 1. Parties table
 CREATE TABLE parties (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE
+    name TEXT NOT NULL UNIQUE,
+    discount NUMERIC(8,2) NOT NULL DEFAULT 0
 );
 
 -- 2. Items table (item_code + name + box_qty + default discount %)

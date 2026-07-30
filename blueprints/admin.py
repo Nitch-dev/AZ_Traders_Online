@@ -14,6 +14,22 @@ def _normalize_header(value):
     return str(value or "").strip().lower().replace(" ", "_")
 
 
+def _normalize_discount_value(value):
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        discount = float(value)
+    else:
+        raw = str(value).strip()
+        if raw == "":
+            return 0.0
+        try:
+            discount = float(raw)
+        except (TypeError, ValueError):
+            return 0.0
+    return max(0.0, discount)
+
+
 def _parse_stock_file(file_storage):
     workbook = load_workbook(file_storage, data_only=True)
     sheet = workbook.active
@@ -241,6 +257,7 @@ def _update_pending_invoice_line_items(sb, inv_id, form_data):
         updates.append({
             "id": int(li["id"]),
             "quantity": quantity,
+            "discount": _normalize_discount_value(li.get("discount", 0)),
         })
 
     sb.table("invoices").update({
@@ -266,7 +283,7 @@ def _update_pending_invoice_line_items(sb, inv_id, form_data):
                 "invoice_id": inv_id,
                 "item_id": it["item_id"],
                 "quantity": it["quantity"],
-                "discount": it["discount"],
+                "discount": 0.0,
             }
             for it in sanitized_new_items
         ]).execute()
@@ -358,9 +375,21 @@ def dashboard():
 @admin_required
 def add_party():
     name = request.form.get("name", "").strip()
+    discount_raw = request.form.get("discount", "0").strip() or "0"
+    discount = _normalize_discount_value(discount_raw)
     if name:
-        get_supabase().table("parties").insert({"name": name}).execute()
+        get_supabase().table("parties").insert({"name": name, "discount": discount}).execute()
         flash("Party added.", "success")
+    return redirect(url_for("admin.dashboard") + "#parties")
+
+
+@admin_bp.route("/parties/update/<int:pid>", methods=["POST"])
+@admin_required
+def update_party(pid):
+    discount_raw = request.form.get("discount", "0").strip() or "0"
+    discount = _normalize_discount_value(discount_raw)
+    get_supabase().table("parties").update({"discount": discount}).eq("id", pid).execute()
+    flash("Party discount updated.", "success")
     return redirect(url_for("admin.dashboard") + "#parties")
 
 
@@ -456,13 +485,13 @@ def rename_adda(aid):
 def review_invoice(inv_id):
     sb = get_supabase()
     rows = sb.table("invoices").select(
-        "*, parties(name), addas(name, number), invoice_items(*, items(item_code, name, box_qty, discount))"
+        "*, parties(name, addr, discount), addas(name, number), invoice_items(*, items(item_code, name, box_qty, discount))"
     ).eq("id", inv_id).execute().data
     if not rows:
         flash("Invoice not found.", "danger")
         return redirect(url_for("admin.dashboard") + "#pending")
     inv = rows[0]
-    parties = sb.table("parties").select("id, name, addr").order("name").execute().data
+    parties = sb.table("parties").select("id, name, addr, discount").order("name").execute().data
     addas = sb.table("addas").select("id, name, number").order("name").execute().data
     warehouses = sb.table("warehouses").select("*").order("name").execute().data
 
@@ -501,10 +530,15 @@ def review_invoice(inv_id):
         for li in inv.get("invoice_items", [])
     ]
 
+    party_discount_value = 0.0
+    if inv.get("parties"):
+        party_discount_value = _normalize_discount_value(inv["parties"].get("discount"))
+
     return render_template("review_invoice.html", inv=inv, parties=parties, addas=addas, warehouses=warehouses,
                            item_stock_map=item_stock_map,
                            wh_stock_json=wh_stock_json,
-                           inv_items_json=inv_items_json)
+                           inv_items_json=inv_items_json,
+                           party_discount_value=party_discount_value)
 
 
 # ========== INVOICE APPROVAL (POST with warehouse) ==========
@@ -519,16 +553,8 @@ def approve_invoice(inv_id):
 
     warehouse_id = int(warehouse_id)
 
-    invoice_discount_raw = (request.form.get("invoice_discount", "0") or "0").strip()
-    try:
-        invoice_discount = float(invoice_discount_raw)
-    except ValueError:
-        flash("Invalid invoice discount.", "danger")
-        return redirect(url_for("admin.review_invoice", inv_id=inv_id))
-
-    if invoice_discount < 0:
-        flash("Invoice discount cannot be negative.", "danger")
-        return redirect(url_for("admin.review_invoice", inv_id=inv_id))
+    party_discount_raw = (request.form.get("party_discount", "0") or "0").strip()
+    party_discount = _normalize_discount_value(party_discount_raw)
 
     so = (request.form.get("so") or "").strip()
     if not so:
@@ -566,15 +592,19 @@ def approve_invoice(inv_id):
     }).execute()
     approved_id = approved_result.data[0]["id"]
 
-    # Copy line items to approved_invoice_items using invoice-level discount
+    if inv.get("party_id"):
+        sb.table("parties").update({"discount": party_discount}).eq("id", inv["party_id"]).execute()
+
+    # Copy line items to approved_invoice_items using the party discount
     line_items = sb.table("invoice_items").select("*").eq("invoice_id", inv_id).execute().data
     if line_items:
+        sb.table("invoice_items").update({"discount": party_discount}).eq("invoice_id", inv_id).execute()
         approved_lines = [
             {
                 "approved_invoice_id": approved_id,
                 "item_id": li["item_id"],
                 "quantity": li["quantity"],
-                "discount": invoice_discount,
+                "discount": party_discount,
             }
             for li in line_items
         ]
@@ -629,8 +659,16 @@ def update_invoice(inv_id):
     ok, msg = _update_pending_invoice_line_items(sb, inv_id, request.form)
     if not ok:
         flash(msg, "danger")
-    else:
-        flash("Invoice changes saved.", "success")
+        return redirect(url_for("admin.review_invoice", inv_id=inv_id))
+
+    party_discount_raw = (request.form.get("party_discount", "0") or "0").strip()
+    party_discount = _normalize_discount_value(party_discount_raw)
+    rows = sb.table("invoices").select("party_id").eq("id", inv_id).execute().data
+    if rows and rows[0].get("party_id"):
+        sb.table("parties").update({"discount": party_discount}).eq("id", rows[0]["party_id"]).execute()
+        sb.table("invoice_items").update({"discount": party_discount}).eq("invoice_id", inv_id).execute()
+
+    flash("Invoice changes saved.", "success")
     return redirect(url_for("admin.review_invoice", inv_id=inv_id))
 
 

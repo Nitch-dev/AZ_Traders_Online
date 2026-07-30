@@ -221,9 +221,9 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Invoice Discount (%)</label>
-                    <input type="number" name="invoice_discount" class="form-control" min="0" step="0.01" value="0">
-                    <div class="form-text">Apply this discount percentage to the total invoice at approval time.</div>
+                    <label class="form-label fw-bold">Party Discount (%)</label>
+                    <input type="number" name="party_discount" class="form-control" min="0" step="0.01" value="{{ party_discount_value }}">
+                    <div class="form-text">This discount is saved for the party and will be used on future invoices unless you change it.</div>
                 </div>
 
                 <!-- Stock check results shown here -->
